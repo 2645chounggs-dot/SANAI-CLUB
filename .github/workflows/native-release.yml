@@ -1,0 +1,95 @@
+name: SANAI APK release
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'app/build.gradle'
+permissions:
+  contents: write
+concurrency:
+  group: sanai-native-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check release version and signing configuration
+        id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_KEY: ${{ secrets.SANAI_KEYSTORE_B64 != '' && secrets.SANAI_STORE_PASSWORD != '' && secrets.SANAI_KEY_ALIAS != '' }}
+        run: |
+          set -euo pipefail
+          if [ ! -f app/build.gradle ]; then
+            echo 'Source not imported yet.'
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          name=$(sed -nE "s/.*versionName '([^']+)'.*/\1/p" app/build.gradle)
+          test -n "$name"
+          if [ "$HAS_KEY" != true ]; then
+            echo 'Signing secrets not configured; skip build.'
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+          elif gh release view "v$name" >/dev/null 2>&1; then
+            echo 'This version is already published; bump versionCode and versionName.'
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-java@v4
+        if: steps.preflight.outputs.build == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        if: steps.preflight.outputs.build == 'true'
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        if: steps.preflight.outputs.build == 'true'
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.preflight.outputs.build == 'true'
+        with:
+          gradle-version: '8.9'
+      - name: Test web data bridge
+        if: steps.preflight.outputs.build == 'true'
+        run: node tests/widget-snapshot.cjs
+      - name: Build and sign with existing key
+        if: steps.preflight.outputs.build == 'true'
+        env:
+          SANAI_KEYSTORE_B64: ${{ secrets.SANAI_KEYSTORE_B64 }}
+          SANAI_STORE_PASSWORD: ${{ secrets.SANAI_STORE_PASSWORD }}
+          SANAI_KEY_ALIAS: ${{ secrets.SANAI_KEY_ALIAS }}
+          SANAI_KEY_PASSWORD: ${{ secrets.SANAI_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SANAI_KEYSTORE_B64" && test -n "$SANAI_STORE_PASSWORD" && test -n "$SANAI_KEY_ALIAS"
+          export SANAI_KEYSTORE="$RUNNER_TEMP/sanai.p12"
+          trap 'rm -f "$SANAI_KEYSTORE"' EXIT
+          umask 077
+          printf '%s' "$SANAI_KEYSTORE_B64" | base64 --decode > "$SANAI_KEYSTORE"
+          export SANAI_KEY_PASSWORD="${SANAI_KEY_PASSWORD:-$SANAI_STORE_PASSWORD}"
+          gradle --no-daemon :app:assembleRelease
+          mkdir -p release
+          cp app/build/outputs/apk/release/app-release.apk release/SANAI.apk
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$signer" verify --print-certs release/SANAI.apk | tee "$RUNNER_TEMP/cert.txt"
+          grep -qi 'c33f45fd2ab658df9723d113ba4b35c5b72fab87d8e7f696e423a6bc4a686b13' "$RUNNER_TEMP/cert.txt"
+          code=$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' app/build.gradle)
+          name=$(sed -nE "s/.*versionName '([^']+)'.*/\1/p" app/build.gradle)
+          python scripts/release.py apk release/SANAI.apk release --version "$code" --name "$name"
+          echo "tag=v$name" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        if: steps.preflight.outputs.build == 'true'
+        with:
+          name: SANAI-signed-release
+          path: release/
+          retention-days: 7
+      - name: Publish signed release
+        if: steps.preflight.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$tag" release/SANAI.apk release/update.json release/update.sig --target "$GITHUB_SHA" --title "사나이크럽 $tag" --notes 'CHAD WIDGETS + 업데이트 센터' --latest
