@@ -1,0 +1,63 @@
+name: Import SANAI V5.5 source
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['SANAI_v55_CI_ready.zip']
+permissions:
+  contents: write
+concurrency:
+  group: sanai-source-import
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Import only the verified source archive
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib, hashlib, zipfile
+          p = pathlib.Path('SANAI_v55_CI_ready.zip')
+          if not p.is_file():
+              raise SystemExit('Upload SANAI_v55_CI_ready.zip to the repository root first.')
+          expected = 'fc713e43ecbb72b299a7b49abc7b4dba144336874821337b52c30ea5aa8fcd32'
+          if hashlib.sha256(p.read_bytes()).hexdigest() != expected:
+              raise SystemExit('Unexpected archive hash. Do not import.')
+          if pathlib.Path('app/build.gradle').exists():
+              raise SystemExit('Source already exists; refusing to overwrite.')
+          with zipfile.ZipFile(p) as z:
+              for item in z.infolist():
+                  path = pathlib.PurePosixPath(item.filename)
+                  if path.is_absolute() or '..' in path.parts:
+                      raise SystemExit('Unsafe archive path')
+                  if item.is_dir() or path.parts[0] == '.github':
+                      continue
+                  if not (path.parts[0] in ('app','scripts','ota','tests') or str(path) in ('README.md','.gitignore','build.gradle','settings.gradle')):
+                      raise SystemExit('Unexpected file: ' + str(path))
+                  dest = pathlib.Path(*path.parts)
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  dest.write_bytes(z.read(item))
+          update = pathlib.Path('app/src/main/java/club/sanai/app/UpdateCenter.java')
+          old = 'p.getString("repo","")'
+          text = update.read_text()
+          if text.count(old) != 1:
+              raise SystemExit('Default channel location not found')
+          update.write_text(text.replace(old, 'p.getString("repo","2645chounggs-dot/SANAI-CLUB")'))
+          readme = pathlib.Path('README.md')
+          readme.write_text(readme.read_text() + '\n\n공식 업데이트 채널 기본값: 2645chounggs-dot/SANAI-CLUB. 최초 실행 시 별도 입력 불필요.\n')
+          PY
+          node tests/widget-snapshot.cjs
+      - name: Commit verified source to main
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- app scripts ota tests README.md .gitignore build.gradle settings.gradle
+          git rm -- SANAI_v55_CI_ready.zip
+          git commit -m 'Import verified SANAI V5.5 Android source'
+          git push origin HEAD:main
+          echo 'Source imported. Configure signing secrets and manually run SANAI APK release.'
