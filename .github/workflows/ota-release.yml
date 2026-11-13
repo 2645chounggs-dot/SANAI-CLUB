@@ -1,0 +1,51 @@
+name: SANAI web patch (OTA)
+on:
+  workflow_dispatch:
+    inputs:
+      native_version:
+        description: 'Target installed APK versionCode, e.g. 55'
+        required: true
+        default: '55'
+      revision:
+        description: 'Increasing positive patch revision'
+        required: true
+      notes:
+        description: 'Patch description'
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: sanai-ota-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test and sign patch
+        env:
+          SANAI_KEYSTORE_B64: ${{ secrets.SANAI_KEYSTORE_B64 }}
+          SANAI_STORE_PASSWORD: ${{ secrets.SANAI_STORE_PASSWORD }}
+          NATIVE_VERSION: ${{ inputs.native_version }}
+          REVISION: ${{ inputs.revision }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          test -n "$SANAI_KEYSTORE_B64" && test -n "$SANAI_STORE_PASSWORD"
+          node --check ota/patch.js
+          node tests/widget-snapshot.cjs
+          export SANAI_KEYSTORE="$RUNNER_TEMP/sanai.p12"
+          trap 'rm -f "$SANAI_KEYSTORE"' EXIT
+          umask 077
+          printf '%s' "$SANAI_KEYSTORE_B64" | base64 --decode > "$SANAI_KEYSTORE"
+          openssl pkcs12 -in "$SANAI_KEYSTORE" -clcerts -nokeys -passin env:SANAI_STORE_PASSWORD | openssl x509 -outform DER | sha256sum | grep -qi 'c33f45fd2ab658df9723d113ba4b35c5b72fab87d8e7f696e423a6bc4a686b13'
+          mkdir -p release
+          cp ota/patch.js release/patch.js
+          python scripts/release.py ota release/patch.js release --version "$NATIVE_VERSION" --revision "$REVISION" --notes "$NOTES"
+      - name: Publish to fixed OTA channel (not latest APK)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ota-channel >/dev/null 2>&1 || gh release create ota-channel --target "$GITHUB_SHA" --prerelease --latest=false --title 'SANAI OTA channel' --notes 'Signed web patches'
+          gh release upload ota-channel release/patch.js release/ota.sig release/ota.json --clobber
