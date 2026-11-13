@@ -86,37 +86,14 @@ jobs:
           umask 077
           printf '%s' "$SANAI_KEYSTORE_B64" | base64 --decode > "$SANAI_KEYSTORE"
           export SANAI_KEY_PASSWORD="${SANAI_KEY_PASSWORD:-$SANAI_STORE_PASSWORD}"
-          # Select the actual private-key entry without printing secret values.
+          # Find the signing entry and check its certificate.
           SANAI_KEY_ALIAS=$(python - <<'PY'
           import os, subprocess, re, sys
-          command = ['keytool','-J-Duser.language=en','-J-Duser.country=US','-list','-v','-storetype','PKCS12','-keystore',os.environ['SANAI_KEYSTORE'],'-storepass:env','SANAI_STORE_PASSWORD']
-          result = subprocess.run(command, capture_output=True, text=True)
+          result = subprocess.run(['keytool','-J-Duser.language=en','-J-Duser.country=US','-list','-v','-storetype','PKCS12','-keystore',os.environ['SANAI_KEYSTORE'],'-storepass:env','SANAI_STORE_PASSWORD'], capture_output=True, text=True)
           if result.returncode:
-              sys.exit('Could not open existing PKCS12 with the configured store password.')
+              sys.exit('Could not open existing PKCS12 with configured password.')
           entries = re.split(r'(?m)^Alias name: ', result.stdout)[1:]
-          aliases = [entry.splitlines()[0].strip() for entry in entries if re.search(r'(?m)^Entry type: PrivateKeyEntry\s*
-          mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk release/SANAI.apk
-          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          "$signer" verify --print-certs release/SANAI.apk | tee "$RUNNER_TEMP/cert.txt"
-          grep -qi 'c33f45fd2ab658df9723d113ba4b35c5b72fab87d8e7f696e423a6bc4a686b13' "$RUNNER_TEMP/cert.txt"
-          code=$(sed -nE 's/.*versionCode ([0-9]+).*/\1/p' app/build.gradle)
-          name=$(sed -nE "s/.*versionName '([^']+)'.*/\1/p" app/build.gradle)
-          python scripts/release.py apk release/SANAI.apk release --version "$code" --name "$name"
-          echo "tag=v$name" >> "$GITHUB_ENV"
-      - uses: actions/upload-artifact@v4
-        if: steps.preflight.outputs.build == 'true'
-        with:
-          name: SANAI-signed-release
-          path: release/
-          retention-days: 7
-      - name: Publish signed release
-        if: steps.preflight.outputs.build == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$tag" release/SANAI.apk release/update.json release/update.sig --target "$GITHUB_SHA" --title "사나이크럽 $tag" --notes 'CHAD WIDGETS + 업데이트 센터' --latest
-, entry)]
+          aliases = [entry.splitlines()[0].strip() for entry in entries if 'Entry type: PrivateKeyEntry' in entry]
           configured = os.environ.get('SANAI_KEY_ALIAS','')
           if len(aliases) == 1:
               print(aliases[0])
@@ -128,7 +105,6 @@ jobs:
           )
           export SANAI_KEY_ALIAS
           echo "::add-mask::$SANAI_KEY_ALIAS"
-          # Check the selected certificate before building or publishing anything.
           keytool -exportcert -storetype PKCS12 -keystore "$SANAI_KEYSTORE" -storepass:env SANAI_STORE_PASSWORD -alias "$SANAI_KEY_ALIAS" -file "$RUNNER_TEMP/sanai-cert.der" >/dev/null 2>&1
           actual=$(sha256sum "$RUNNER_TEMP/sanai-cert.der" | cut -d' ' -f1)
           test "$actual" = 'c33f45fd2ab658df9723d113ba4b35c5b72fab87d8e7f696e423a6bc4a686b13' || { echo 'Existing APK signing certificate mismatch; refusing to build.'; exit 1; }
