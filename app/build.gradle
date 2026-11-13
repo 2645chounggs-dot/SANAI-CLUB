@@ -1,0 +1,19 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'club.sanai.app'
+    compileSdk 35
+    defaultConfig { applicationId 'club.sanai.app'; minSdk 26; targetSdk 32; versionCode 55; versionName '5.5' }
+    signingConfigs {
+        release {
+            if (System.getenv('SANAI_KEYSTORE')) {
+                storeFile file(System.getenv('SANAI_KEYSTORE'))
+                storePassword System.getenv('SANAI_STORE_PASSWORD')
+                keyAlias System.getenv('SANAI_KEY_ALIAS')
+                keyPassword System.getenv('SANAI_KEY_PASSWORD') ?: System.getenv('SANAI_STORE_PASSWORD')
+                storeType 'PKCS12'
+            }
+        }
+    }
+    buildTypes { release { minifyEnabled false; if (System.getenv('SANAI_KEYSTORE')) signingConfig signingConfigs.release } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}

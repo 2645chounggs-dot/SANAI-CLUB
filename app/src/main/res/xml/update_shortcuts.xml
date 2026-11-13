@@ -1,0 +1,5 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+  <shortcut android:shortcutId="update_recovery" android:enabled="true" android:icon="@drawable/icon" android:shortcutShortLabel="@string/update_recovery">
+    <intent android:action="club.sanai.app.UPDATE_RECOVERY" android:targetPackage="club.sanai.app" android:targetClass="club.sanai.app.MainActivity"/>
+  </shortcut>
+</shortcuts>

@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <application android:label="사나이크럽" android:icon="@drawable/icon" android:allowBackup="false" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.NoActionBar">
+        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait" android:configChanges="orientation|screenSize|keyboardHidden" android:launchMode="singleTop">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/update_shortcuts"/>
+        </activity>
+        <provider android:name=".UpdateFileProvider" android:authorities="club.sanai.app.updates" android:exported="false" android:grantUriPermissions="true"/>
+        <receiver android:name=".RestReceiver" android:exported="false"/>
+        <receiver android:name=".WidgetRefresh" android:exported="false"/>
+        <receiver android:name=".NutritionWidget" android:exported="false" android:label="사나이크럽 · 영양 보급"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_nutrition"/></receiver>
+        <receiver android:name=".WorkoutWidget" android:exported="false" android:label="사나이크럽 · 오늘의 전투"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_workout"/></receiver>
+        <receiver android:name=".WeekWidget" android:exported="false" android:label="사나이크럽 · 주간 훈련"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_week"/></receiver>
+        <receiver android:name=".RestWidget" android:exported="false" android:label="사나이크럽 · 휴식 타이머"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_rest"/></receiver>
+    </application>
+</manifest>
