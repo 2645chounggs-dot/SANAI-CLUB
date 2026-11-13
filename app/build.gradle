@@ -17,3 +17,5 @@ android {
     buildTypes { release { minifyEnabled false; if (System.getenv('SANAI_KEYSTORE')) signingConfig signingConfigs.release } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
+
+// Initial signed V5.5 release trigger
