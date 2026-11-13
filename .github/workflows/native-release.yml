@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'app/build.gradle'
+      - '.github/workflows/native-release.yml'
 permissions:
   contents: write
 concurrency:
@@ -44,10 +45,24 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - name: Verify runner Android SDK and required packages
         if: steps.preflight.outputs.build == 'true'
-      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-        if: steps.preflight.outputs.build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          if [ ! -f "$sdk/platforms/android-35/android.jar" ] || [ ! -x "$sdk/build-tools/35.0.0/apksigner" ]; then
+            manager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+            if [ ! -x "$manager" ]; then
+              manager=$(command -v sdkmanager || true)
+            fi
+            test -x "$manager"
+            "$manager" --sdk_root="$sdk" 'platforms;android-35' 'build-tools;35.0.0'
+          fi
+          test -f "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/apksigner"
       - uses: gradle/actions/setup-gradle@v4
         if: steps.preflight.outputs.build == 'true'
         with:
