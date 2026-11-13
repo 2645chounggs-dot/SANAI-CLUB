@@ -15,6 +15,9 @@ android {
         }
     }
     buildTypes { release { minifyEnabled false; if (System.getenv('SANAI_KEYSTORE')) signingConfig signingConfigs.release } }
+    // Direct APK distribution only: keep V5.3 notification/storage behavior for migration.
+    // This exception is for Play Store submission lint only; retain all other lint checks.
+    lint { disable 'ExpiredTargetSdkVersion' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 
