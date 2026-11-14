@@ -129,4 +129,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$tag" release/SANAI.apk release/update.json release/update.sig --target "$GITHUB_SHA" --title "사나이크럽 $tag" --notes 'CHAD WIDGETS + 업데이트 센터' --latest
+          gh release create "$tag" release/SANAI.apk release/update.json release/update.sig --target "$GITHUB_SHA" --title "사나이크럽 $tag" --notes '채드 강림 · 전체화면 휴식 알림 + 30초 연장' --latest
