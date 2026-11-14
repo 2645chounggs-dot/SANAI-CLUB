@@ -1,11 +1,10 @@
 package club.sanai.app;
 
-import android.animation.ValueAnimator;
+import android.os.SystemClock;
+import android.graphics.*;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
-import android.graphics.Color;
-import android.graphics.BitmapFactory;
 import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
@@ -35,6 +34,7 @@ final class ChadAlert {
                 d.show();
                 Window w=d.getWindow();
                 if(w!=null){
+                    if(android.os.Build.VERSION.SDK_INT>=28){WindowManager.LayoutParams p=w.getAttributes();p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;w.setAttributes(p);}
                     w.setLayout(-1,-1);
                     w.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN|WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                     w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
@@ -57,55 +57,86 @@ final class ChadAlert {
     static void activityPaused(Activity a){
         if(dialog!=null&&owner==a){dismiss();RestReceiver.presentPending(a.getApplicationContext());}
     }
+    /** Draw only the art with an elapsed-time frame loop; fixed buttons are real sibling views. */
     private static final class ChadView extends ViewGroup {
-        final FrameLayout artFrame;
-        final ImageView art,controls;
+        final Bitmap artwork,buttonArtwork;
         final Button start,extend;
-        ValueAnimator shake;
+        final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
+        final RectF artRect=new RectF(), controlRect=new RectF();
+        final Rect controlSrc=new Rect();
+        final float density;
+        long started;
+        int safeTop=0,safeBottom=0,safeLeft=0,safeRight=0;
+        ChadGeometry geometry;
         ChadView(Context c){
-            super(c);setBackgroundColor(Color.BLACK);setClipChildren(true);
-            artFrame=new FrameLayout(c);artFrame.setClipChildren(true);artFrame.setClipToPadding(true);
-            art=image(c,"chad-art-v59.jpg");art.setContentDescription("휴식 종료! 일어나라, 사나이! 지금이 바로, 더 강해질 시간이다.");
-            artFrame.addView(art,new FrameLayout.LayoutParams(-1,-1));addView(artFrame);
-            controls=image(c,"chad-controls-v59.jpg");controls.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);addView(controls);
+            super(c);setBackgroundColor(Color.BLACK);setWillNotDraw(false);setClipChildren(true);
+            density=getResources().getDisplayMetrics().density;
+            artwork=load(c,"chad-art-v59.jpg");
+            buttonArtwork=load(c,"chad-controls-v59.jpg");
             start=hit(c,"다음 세트 조지기",false);extend=hit(c,"30초 더 쉬기",true);
             addView(start);addView(extend);
+            setOnApplyWindowInsetsListener((v,insets)->{
+                int t=0,b=0,l=0,r=0;
+                if(android.os.Build.VERSION.SDK_INT>=30){
+                    android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+                    t=bars.top;b=bars.bottom;l=bars.left;r=bars.right;
+                }else{
+                    t=insets.getSystemWindowInsetTop();b=insets.getSystemWindowInsetBottom();l=insets.getSystemWindowInsetLeft();r=insets.getSystemWindowInsetRight();
+                    if(android.os.Build.VERSION.SDK_INT>=28&&insets.getDisplayCutout()!=null){
+                        DisplayCutout d=insets.getDisplayCutout();t=Math.max(t,d.getSafeInsetTop());b=Math.max(b,d.getSafeInsetBottom());l=Math.max(l,d.getSafeInsetLeft());r=Math.max(r,d.getSafeInsetRight());
+                    }
+                }
+                if(t!=safeTop||b!=safeBottom||l!=safeLeft||r!=safeRight){safeTop=t;safeBottom=b;safeLeft=l;safeRight=r;requestLayout();}
+                return insets;
+            });
         }
-        private ImageView image(Context c,String name){
-            ImageView v=new ImageView(c);v.setScaleType(ImageView.ScaleType.FIT_XY);
-            try(InputStream in=c.getAssets().open(name)){v.setImageBitmap(BitmapFactory.decodeStream(in));}
-            catch(Exception ignored){}
-            return v;
+        private Bitmap load(Context c,String name){
+            try(InputStream in=c.getAssets().open(name)){return BitmapFactory.decodeStream(in);}catch(Exception ignored){return null;}
         }
         private Button hit(Context c,String label,boolean more){
             Button b=new Button(c);b.setText(label);b.setTextColor(Color.TRANSPARENT);b.setBackgroundColor(Color.TRANSPARENT);b.setContentDescription(label);b.setPadding(0,0,0,0);b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);
             b.setOnClickListener(v->RestReceiver.choose(c,more));return b;
         }
         @Override protected LayoutParams generateDefaultLayoutParams(){return new LayoutParams(-1,-1);}
-        int pct(int n,float p){return Math.round(n*p);}
         void exact(View v,int w,int h){v.measure(MeasureSpec.makeMeasureSpec(Math.max(0,w),MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(Math.max(0,h),MeasureSpec.EXACTLY));}
         @Override protected void onMeasure(int ws,int hs){
-            int w=MeasureSpec.getSize(ws),h=MeasureSpec.getSize(hs),a=pct(h,.7775f),b=h-a;
-            setMeasuredDimension(w,h);exact(artFrame,w,a);exact(controls,w,b);
-            exact(start,pct(w,.92f)-pct(w,.08f),pct(b,.46f)-pct(b,.01f));
-            exact(extend,pct(w,.70f)-pct(w,.30f),pct(b,.79f)-pct(b,.52f));
+            int w=MeasureSpec.getSize(ws),h=MeasureSpec.getSize(hs);
+            setMeasuredDimension(w,h);
+            geometry=new ChadGeometry(w,h,density,safeTop,safeBottom,safeLeft,safeRight);
+            exact(start,geometry.startR-geometry.startL,geometry.startB-geometry.startT);
+            exact(extend,geometry.moreR-geometry.moreL,geometry.moreB-geometry.moreT);
         }
         @Override protected void onLayout(boolean changed,int l,int t,int r,int b){
-            int w=r-l,h=b-t,a=pct(h,.7775f),ch=h-a;
-            artFrame.layout(0,0,w,a);controls.layout(0,a,w,h);
-            start.layout(pct(w,.08f),a+pct(ch,.01f),pct(w,.92f),a+pct(ch,.46f));
-            extend.layout(pct(w,.30f),a+pct(ch,.52f),pct(w,.70f),a+pct(ch,.79f));
+            ChadGeometry g=geometry;if(g==null)return;
+            artRect.set(g.artL,g.artT,g.artR,g.artB);
+            controlRect.set(g.controlL,g.controlT,g.controlR,g.controlB);
+            if(buttonArtwork!=null)controlSrc.set(0,0,buttonArtwork.getWidth(),Math.round(buttonArtwork.getHeight()*ChadGeometry.CONTROL_CROP));
+            start.layout(g.startL,g.startT,g.startR,g.startB);
+            extend.layout(g.moreL,g.moreT,g.moreR,g.moreB);
         }
-        @Override protected void onAttachedToWindow(){
-            super.onAttachedToWindow();
-            if(!ValueAnimator.areAnimatorsEnabled())return;
-            art.setScaleX(1.028f);art.setScaleY(1.028f);
-            final float[] xs={0,-4,4,-3,3,-2,0},ys={0,2,-2,-2,2,0,0};
-            final float density=getResources().getDisplayMetrics().density;
-            shake=ValueAnimator.ofFloat(0f,1f);shake.setDuration(2000);shake.setRepeatCount(ValueAnimator.INFINITE);shake.setInterpolator(new android.view.animation.LinearInterpolator());
-            shake.addUpdateListener(a->{float f=(float)a.getAnimatedValue();if(f>=.24f){art.setTranslationX(0);art.setTranslationY(0);return;}float p=f/.04f;int k=Math.min(5,(int)p);float q=p-k;art.setTranslationX((xs[k]+(xs[k+1]-xs[k])*q)*density);art.setTranslationY((ys[k]+(ys[k+1]-ys[k])*q)*density);});
-            shake.start();
+        @Override protected void onDraw(Canvas c){
+            super.onDraw(c);ChadGeometry g=geometry;if(g==null)return;
+            // Extend outer artwork edges under the safe area and moving layer, instead of enlarging the artwork.
+            if(artwork!=null){
+                int bw=artwork.getWidth(),bh=artwork.getHeight();
+                c.drawBitmap(artwork,new Rect(0,0,bw,1),new RectF(0,0,getWidth(),g.artT+g.maxShake),paint);
+                c.drawBitmap(artwork,new Rect(0,0,1,bh),new RectF(0,g.artT,g.artL+g.maxShake,g.controlT),paint);
+                c.drawBitmap(artwork,new Rect(bw-1,0,bw,bh),new RectF(g.artR-g.maxShake,g.artT,getWidth(),g.controlT),paint);
+                c.drawBitmap(artwork,new Rect(0,bh-1,bw,bh),new RectF(0,g.artB-g.maxShake,getWidth(),g.controlT),paint);
+                long elapsed=SystemClock.uptimeMillis()-started;
+                float dx=ChadGeometry.shakeX(elapsed,density),dy=ChadGeometry.shakeY(elapsed,density);
+                int save=c.save();c.clipRect(0,0,getWidth(),g.controlT);
+                c.translate(dx,dy);c.drawBitmap(artwork,null,artRect,paint);c.restoreToCount(save);
+            }
+            if(buttonArtwork!=null){
+                c.drawBitmap(buttonArtwork,controlSrc,controlRect,paint);
+                int bh=controlSrc.bottom,bw=controlSrc.right;
+                if(g.controlB<getHeight())c.drawBitmap(buttonArtwork,new Rect(0,bh-1,bw,bh),new RectF(0,g.controlB,getWidth(),getHeight()),paint);
+            }
+            // No ValueAnimator: this alert's explicitly requested shake does not depend on Android animator duration scale.
+            if(isAttachedToWindow()&&getWindowVisibility()==VISIBLE)postInvalidateOnAnimation();
         }
-        @Override protected void onDetachedFromWindow(){if(shake!=null){shake.cancel();shake=null;}super.onDetachedFromWindow();}
+        @Override protected void onAttachedToWindow(){super.onAttachedToWindow();started=SystemClock.uptimeMillis();requestApplyInsets();invalidate();}
+        @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);if(visibility==VISIBLE)invalidate();}
     }
 }

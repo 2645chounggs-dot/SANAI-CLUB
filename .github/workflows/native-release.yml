@@ -69,7 +69,11 @@ jobs:
           gradle-version: '8.9'
       - name: Test web data bridge
         if: steps.preflight.outputs.build == 'true'
-        run: node tests/widget-snapshot.cjs
+        run: |
+          node tests/widget-snapshot.cjs
+          mkdir -p /tmp/sanai-geometry-test
+          javac -d /tmp/sanai-geometry-test app/src/main/java/club/sanai/app/ChadGeometry.java tests/ChadGeometryTest.java
+          java -cp /tmp/sanai-geometry-test club.sanai.app.ChadGeometryTest
       - name: Build and sign with existing key
         if: steps.preflight.outputs.build == 'true'
         env:
@@ -129,4 +133,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$tag" release/SANAI.apk release/update.json release/update.sig --target "$GITHUB_SHA" --title "사나이크럽 $tag" --notes '채드 강림 · 전체화면 휴식 알림 + 30초 연장' --latest
+          gh release create "$tag" release/SANAI.apk release/update.json release/update.sig --target "$GITHUB_SHA" --title "사나이크럽 $tag" --notes '채드 강림 · 화면 잘림/하단 여백/흔들림 개선' --latest
