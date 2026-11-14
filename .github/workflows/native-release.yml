@@ -133,4 +133,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$tag" release/SANAI.apk release/update.json release/update.sig --target "$GITHUB_SHA" --title "사나이크럽 $tag" --notes '채드 강림 · 화면 잘림/하단 여백/흔들림 개선' --latest
+          gh release create "$tag" release/SANAI.apk release/update.json release/update.sig --target "$GITHUB_SHA" --title "사나이크럽 $tag" --notes '채드 강림 · 동일 오버레이 렌더링, 전체화면 배치, 가장자리 깨짐 제거' --latest
