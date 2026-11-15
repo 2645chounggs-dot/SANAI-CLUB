@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'club.sanai.app'
     compileSdk 35
-    defaultConfig { applicationId 'club.sanai.app'; minSdk 26; targetSdk 32; versionCode 64; versionName '6.3.2' }
+    defaultConfig { applicationId 'club.sanai.app'; minSdk 26; targetSdk 32; versionCode 65; versionName '6.3.3' }
     signingConfigs {
         release {
             if (System.getenv('SANAI_KEYSTORE')) {
