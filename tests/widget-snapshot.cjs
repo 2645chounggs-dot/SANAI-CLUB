@@ -23,3 +23,18 @@ const timer59=fs.readFileSync('app/src/main/assets/rest-timer-v50.js','utf8');ne
 assert(html58.includes('id="rest-full-alert"'));assert(html58.includes('id="rest-overlay-enable"'));assert(timer59.includes('SanaiNative.restFinish(root,end)'));assert(timer59.includes('SanaiNative.restArm(st.root,st.end'));
 for(const a of ['chad-art-v59.jpg','chad-controls-v59.jpg']){const b=fs.readFileSync('app/src/main/assets/'+a);assert(b.length>10000&&b[0]===255&&b[1]===216);}
 console.log('CHAD full-screen assets and bridge tests PASS');
+
+
+// V6.4 arsenal: metadata, aliases, special recording units and cardio.
+const html64=fs.readFileSync('app/src/main/assets/index.html','utf8');
+const db64=fs.readFileSync('app/src/main/assets/sanai-arsenal-v64.js','utf8');
+const a64=html64.slice(html64.indexOf('const library='),html64.indexOf('const video='));
+const b64=html64.slice(html64.indexOf('const freeExercises'),html64.indexOf('const guideTypes'));
+const m64=html64.slice(html64.indexOf('const subGroups'),html64.indexOf('function detailedCounts'));
+const alt64=html64.slice(html64.indexOf('function altList'),html64.indexOf('function openAlternatives'));
+const cardio64=html64.slice(html64.indexOf('const v64CardioTypes'),html64.indexOf('function v64CardioPanel'));
+const ctx64=vm.createContext({validDate:s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)});
+vm.runInContext([db64,a64,b64,m64,alt64,cardio64].join('\n'),ctx64);
+const checks64=vm.runInContext("({total:guideExercises.length,meta:guideMeta.length,unique:new Set(guideExercises.map(x=>x[1])).size,complete:guideExercises.every((x,i)=>x.length===7&&x.every(Boolean)&&guideMeta[i].length===2),deadlift:guideIndex({name:'데드리프트'})!==guideIndex({name:'루마니안 데드리프트'}),calf:muscle({name:'브이 스쿼트 카프레이즈'}),pullup:guideIndex({name:'턱걸이'})===guideIndex({name:'풀업'}),search:v64Match(guideExercises[guideIndex({name:'턱걸이'})],guideIndex({name:'턱걸이'}),'턱걸이'),body:v64Default({name:'푸시업',machine:'맨몸'}),assist:v64Mode({name:'어시스트 친업',machine:'머신'}),timed:v64Labels({name:'플랭크',machine:'맨몸'})[1],band:v64Mode({name:'밴드 로우',machine:'밴드'}),mapped:guideExercises.every(x=>muscle({name:x[1]})===x[0]&&Array.isArray(secondaryFor({name:x[1],machine:x[2]}))),alternatives:guideExercises.every((x,i)=>altList(i).every(j=>j!==i&&j>=0&&j<guideExercises.length)),cross:altList(guideIndex({name:'가슴 딥스'})).some(j=>guideExercises[j][0]==='삼두'),cardio:v64CardioClean([{id:'a',date:'2026-11-15',type:'트레드밀 걷기',minutes:25,km:2,speed:4.8,incline:5}]).length,invalid:v64CardioClean([{id:'a',date:'2026-11-15',type:'트레드밀 걷기',minutes:-1}]).length})",ctx64);
+assert.equal(checks64.total,259);assert.equal(checks64.meta,259);assert.equal(checks64.unique,259);assert(checks64.complete);assert(checks64.deadlift);assert.equal(checks64.calf,'종아리');assert(checks64.pullup);assert(checks64.search);assert.equal(checks64.body,0);assert.equal(checks64.assist,'assist');assert(checks64.timed.includes('초'));assert.equal(checks64.band,'band');assert(checks64.mapped);assert(checks64.alternatives);assert(checks64.cross);assert.equal(checks64.cardio,1);assert.equal(checks64.invalid,0);
+console.log('V6.4 arsenal tests PASS');
