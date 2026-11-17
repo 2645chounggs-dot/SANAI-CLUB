@@ -1,11 +1,14 @@
 name: SANAI web patch (OTA)
 on:
+  push:
+    branches: [main]
+    paths: ['ota/release.json']
   workflow_dispatch:
     inputs:
       native_version:
-        description: 'Target installed APK versionCode, e.g. 55'
+        description: 'Target installed APK versionCode, e.g. 69'
         required: true
-        default: '55'
+        default: '69'
       revision:
         description: 'Increasing positive patch revision'
         required: true
@@ -23,13 +26,25 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve patch release parameters
+        env:
+          INPUT_VERSION: ${{ inputs.native_version }}
+          INPUT_REVISION: ${{ inputs.revision }}
+          INPUT_NOTES: ${{ inputs.notes }}
+        run: |
+          python - <<'PY'
+          import json, os
+          cfg=json.load(open('ota/release.json')) if os.environ['GITHUB_EVENT_NAME']=='push' else {'nativeVersion':os.environ['INPUT_VERSION'],'revision':os.environ['INPUT_REVISION'],'notes':os.environ['INPUT_NOTES']}
+          v,r=int(cfg['nativeVersion']),int(cfg['revision'])
+          n=cfg['notes']
+          assert v>0 and r>0 and isinstance(n,str) and n.strip() and '\n' not in n and '\r' not in n
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              out.write(f'NATIVE_VERSION={v}\nREVISION={r}\nNOTES={n}\n')
+          PY
       - name: Test and sign patch
         env:
           SANAI_KEYSTORE_B64: ${{ secrets.SANAI_KEYSTORE_B64 }}
           SANAI_STORE_PASSWORD: ${{ secrets.SANAI_STORE_PASSWORD }}
-          NATIVE_VERSION: ${{ inputs.native_version }}
-          REVISION: ${{ inputs.revision }}
-          NOTES: ${{ inputs.notes }}
         run: |
           set -euo pipefail
           test -n "$SANAI_KEYSTORE_B64" && test -n "$SANAI_STORE_PASSWORD"
@@ -47,5 +62,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view ota-channel >/dev/null 2>&1; then
+            mkdir -p "$RUNNER_TEMP/current-ota"
+            if gh release download ota-channel --pattern ota.json --dir "$RUNNER_TEMP/current-ota"; then
+              python - "$RUNNER_TEMP/current-ota/ota.json" release/ota.json <<'PY'
+          import json,sys
+          old,new=(json.load(open(p)) for p in sys.argv[1:])
+          assert new['nativeVersion']>old['nativeVersion'] or (new['nativeVersion']==old['nativeVersion'] and new['revision']>old['revision']), 'Refusing older or repeated OTA'
+          PY
+            else
+              echo 'Existing OTA channel has no readable metadata; refusing overwrite.'
+              exit 1
+            fi
+          fi
           gh release view ota-channel >/dev/null 2>&1 || gh release create ota-channel --target "$GITHUB_SHA" --prerelease --latest=false --title 'SANAI OTA channel' --notes 'Signed web patches'
           gh release upload ota-channel release/patch.js release/ota.sig release/ota.json --clobber
