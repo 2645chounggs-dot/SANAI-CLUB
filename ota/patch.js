@@ -57,7 +57,8 @@ function sanaiMealServing(x){
  if(x.unit==='인분')return x;
  if(x.unit!=='g'||!Number.isFinite(x.portion)||x.portion<=0||!Number.isFinite(x.base)||x.base<=0)return x;
  if(!/밥|덮밥|김밥|솥밥|오무라이스|오므라이스|죽|찌개|전골|국밥|국$|국\s*\(|탕|수프|스프|면|국수|우동|냉면|라면|라멘|짬뽕|짜장|자장|파스타|떡볶이|만두|돈까스|돈가스|카레|스튜|볶음|불고기|찜|족발|보쌈|순대|샌드위치|햄버거|버거|포케|샐러드|피자|치킨|탕수육|닭발|양꼬치|초밥|스테이크/.test(x.name||''))return x;
- if(/생것|마른 것|건조|분말|소스|양념장|조리 전/.test(x.name||''))return x;
+ if(/생것|마른 것|건조|분말|소스|양념장|조리 전|식용유|기름/.test(x.name||''))return x;
+ if(x.foodCode&&x.portion===x.base)return x; // DB fallback is not a verified serving.
  const g=x.portion,ratio=g/x.base;
  return {...x,base:1,portion:1,unit:'인분',kcal:x.kcal*ratio,p:x.p*ratio,c:x.c*ratio,f:x.f*ratio,estimate:true,serving:'1인분 약 '+g+'g',source:(x.source||'기본 추정치')+' · 1인분 약 '+g+'g',servingGrams:g};
 }
