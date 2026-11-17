@@ -42,3 +42,27 @@ console.log('V6.4 arsenal tests PASS');
 // V6.4.2 protein nutrition: official 90-serving Natural Chocolate; only legacy default migrates.
 const proteinChecks=vm.runInContext(`(()=>{const legacy={name:'마이프로틴 임팩트웨이 WPC',grams:20,kcal:80,p:15,c:2,f:1.4,custom:false};const custom={...legacy,custom:true};const other={...legacy,name:'다른 프로틴'};const log={name:'과거 프로틴',base:20,unit:'g',kcal:80,p:15,c:2,f:1.4,id:'p1',date:'2026-11-15',meal:'간식',amount:40};const clean=nClean({protein:legacy,logs:[log],weight:72});return {fresh:nDefault().protein,migrated:clean.protein,custom:nClean({protein:custom}).protein,other:nClean({protein:other}).protein,logs:clean.logs,weight:clean.weight,reloaded:nClean(clean).protein,official:nProteinOfficial(clean.protein),valid:nProteinValid(clean.protein)}})()`,favctx);
 assert.equal(proteinChecks.fresh.grams,30);assert.equal(proteinChecks.fresh.kcal,111);assert.equal(proteinChecks.fresh.p,21);assert.equal(proteinChecks.fresh.c,2.1);assert.equal(proteinChecks.fresh.f,2);assert.deepEqual(proteinChecks.fresh,proteinChecks.migrated);assert.deepEqual(proteinChecks.reloaded,proteinChecks.migrated);assert.equal(proteinChecks.custom.grams,20);assert.equal(proteinChecks.custom.custom,true);assert.equal(proteinChecks.other.name,'다른 프로틴');assert.equal(proteinChecks.logs[0].p,15);assert.equal(proteinChecks.logs[0].amount,40);assert.equal(proteinChecks.weight,72);assert(proteinChecks.official&&proteinChecks.valid);console.log('V6.4.2 protein migration tests PASS');
+
+// V6.4.3 warm-up: use planned load, same-machine fallback, and never mutate work sets.
+const wuSrc=html56.slice(html56.indexOf('function warmupSteps('),html56.indexOf('function warmupPanel('));
+assert(wuSrc.includes('function warmupPlan('));
+const wuCtx=vm.createContext({v6Step:()=>2.5,v64Special:e=>e.special===true,historyFor:e=>e.machine==='정확한기구'?[{date:'2026-11-14',e:{sets:[{kg:80,reps:12}]}}]:[]});
+vm.runInContext(wuSrc,wuCtx);
+const wuResult=vm.runInContext(`(()=>{
+ const draft=(part,kg,machine='머신',name='브이스쿼트')=>({part,exercises:[{name,machine,sets:[{kg,reps:null}]}]});
+ const d=draft('하체',80),before=JSON.stringify(d);
+ const legs=warmupPlan(d),unchanged=before===JSON.stringify(d);
+ const push=warmupPlan(draft('가슴·삼두',45,'머신','인클라인 벤치프레스'));
+ const pull=warmupPlan(draft('등·이두·어깨',70,'올림피아','하이로우'));
+ const fallback=warmupPlan(draft('하체',null,'정확한기구'));
+ const unknown=warmupPlan(draft('하체',null,'다른기구'));
+ const special=draft('등',40);special.exercises[0].special=true;
+ return {legs,push,pull,fallback,unknown,unchanged,special:warmupPlan(special),editing:warmupPlan({...d,editingId:'old'}),other:warmupPlan(draft('복부',40)),small:warmupSteps(2.5,2.5),duplicate:warmupSteps(5,2.5),invalid:warmupSteps(NaN,2.5)};
+})()`,wuCtx);
+assert.equal(JSON.stringify(wuResult.legs.sets),JSON.stringify([{kg:40,reps:10},{kg:60,reps:5}]));
+assert.equal(wuResult.push.sets[0].kg,22.5);assert.equal(wuResult.push.sets[1].kg,32.5);
+assert.equal(wuResult.pull.sets[0].kg,35);assert.equal(wuResult.pull.sets[1].kg,52.5);
+assert.equal(wuResult.fallback.base,80);assert(!wuResult.unknown.sets);assert(!wuResult.special.sets);
+assert(wuResult.unchanged);assert.equal(wuResult.editing,null);assert.equal(wuResult.other,null);
+assert.equal(wuResult.small.length,0);assert.equal(wuResult.duplicate.length,1);assert.equal(wuResult.invalid.length,0);
+assert(html56.includes('id="sanai-warmup"'));assert(html56.includes('refreshWarmup()'));console.log('V6.4.3 warm-up tests PASS');
