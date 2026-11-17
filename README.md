@@ -17,8 +17,17 @@ V5.4 위젯 소스 기반. 기존 package `club.sanai.app`, minSdk 26, targetSdk
 ## 이후 APK 변경
 `app/build.gradle`의 versionCode 및 versionName을 올리고 코드 변경 후 `v5.6` 같은 main 브랜치 푸시 또는 Actions 실행. 기존 키 유지. main에 버전이 변경된 app/build.gradle이 반영되면 자동 실행하며, 이미 출시된 버전은 건너뛴다. 서명 Secrets가 미설정된 경우 빌드하지 않는다. 최초 Secrets 등록 후에는 Actions에서 직접 한 번 실행한다. 위젯, 네이티브 알림, 권한 변경은 APK 빌드 필요. 설치 파일은 현재 앱 인증서로 서명한 메타데이터, SHA-256, package ID, versionCode, APK 인증서 검증 통과 후에만 Android 설치 화면을 연다.
 
+## 현재 업데이트 정책 (V6.4.3 / OTA 우선)
+
+- 웹 화면, 운동 분석, 식품 DB 등 기존 네이티브 기능으로 처리 가능한 변경은 `ota/patch.js`에 누적 패치로 구현한다. `ota/release.json`의 nativeVersion·revision·notes를 마지막에 갱신하면 main push에서 서명·테스트·배포가 실행된다.
+- 첫 패치는 V6.4.2 (versionCode 69) 전용 r1 워밍업 추천이다. V6.4.3 (70)은 해당 기능이 APK에 기본 포함되어 있으므로 r1을 적용하지 않는다. 실제 OTA 게시 및 기기 적용 여부는 Actions와 업데이트 센터에서 확인한다.
+- 설치된 APK의 versionCode와 OTA 대상이 정확히 일치해야 한다. 현재 고정 ota-channel은 한 nativeVersion만 배포하므로 다른 설치 버전을 동시에 지원하지 않는다.
+- 앱 내 업데이트 센터 → 웹 패치 확인 (OTA) → 적용 승인. APK 설치 권한이나 삼성 보안 자동 차단을 변경하지 않는다. 복구는 업데이트 센터의 웹 패치 제거를 사용한다.
+- 네이티브 코드·권한·위젯 변경은 기존 서명 APK 릴리스로만 배포한다. 기존 APK의 자동 확인 순서는 APK 우선이며, 이 순서를 바꾸는 것도 네이티브 업데이트가 필요하다.
+- 개인 운동/식단 데이터 및 서명 비밀은 저장소나 패치에 포함하지 않는다.
+
 ## OTA 웹 패치 (제한된 기능)
-기존 데이터 저장 출처를 그대로 유지하도록 전체 HTML 번들 교체 대신 서명된 JavaScript/CSS 패치만 앱 페이지가 로드된 뒤 실행한다. 화면 스타일/함수/일부 기능을 변경할 수 있으나 초기화 구조 변경, 새 네이티브 기능 등은 APK로 배포해야 한다. `ota/patch.js`의 예제는 아무 동작도 하지 않는 기본 예제다. 실제 수정 시 누적형, 재실행 안전한 패치를 작성하고 로컬 저장 키를 변경하지 말 것. 외부 스크립트 로드 금지. Actions → SANAI web patch (OTA) → target native versionCode, 증가하는 revision, 설명 입력 → Run workflow. 기존 APK와 동일한 서명키로 metadata 서명 후 `ota-channel` prerelease에 배포. APK 최신 릴리스와 별개. 앱에서 웹 패치 확인 → 적용 승인. 자동 확인도 가능하지만 자동 실행 전 사용자 승인을 받는다. 복구: 업데이트 센터에서 웹 패치 제거, 또는 홈 화면 앱 아이콘 길게 누르기 → 업데이트 복구 (지원 런처). 패치 제거는 기록을 지우지 않는다. 같은 APK 버전의 이전 revision은 재적용 불가; 새 패치는 더 큰 revision 필요. 새 APK 버전은 맞지 않는 이전 패치 제거.
+기존 데이터 저장 출처를 그대로 유지하도록 전체 HTML 번들 교체 대신 서명된 JavaScript/CSS 패치만 앱 페이지가 로드된 뒤 실행한다. 화면 스타일/함수/일부 기능을 변경할 수 있으나 초기화 구조 변경, 새 네이티브 기능 등은 APK로 배포해야 한다. `ota/patch.js`는 V6.4.2 전용 누적형 r1 워밍업 패치다. 실제 수정 시 누적형, 재실행 안전한 패치를 작성하고 로컬 저장 키를 변경하지 말 것. 외부 스크립트 로드 금지. Actions → SANAI web patch (OTA) → target native versionCode, 증가하는 revision, 설명 입력 → Run workflow. 기존 APK와 동일한 서명키로 metadata 서명 후 `ota-channel` prerelease에 배포. APK 최신 릴리스와 별개. 앱에서 웹 패치 확인 → 적용 승인. 자동 확인도 가능하지만 자동 실행 전 사용자 승인을 받는다. 복구: 업데이트 센터에서 웹 패치 제거, 또는 홈 화면 앱 아이콘 길게 누르기 → 업데이트 복구 (지원 런처). 패치 제거는 기록을 지우지 않는다. 같은 APK 버전의 이전 revision은 재적용 불가; 새 패치는 더 큰 revision 필요. 새 APK 버전은 맞지 않는 이전 패치 제거.
 
 ## 검증 및 제한
 - 기존 4종 위젯 및 차드 배경 소스 보존, JS 위젯 스냅샷 테스트 통과.
