@@ -76,13 +76,31 @@ if(otaR1.includes('__sanaiWarmupR1')){
  const natural={before:x=>{host=x}};
  const ctx=vm.createContext({window:{},document:{querySelector:()=>header,getElementById:()=>host,createElement:()=>({id:'',innerHTML:''})},
  main:{querySelector:()=>natural,addEventListener:(name,fn)=>listeners.push(fn)},tab:'edit',draft:{part:'하체',exercises:[{name:'브이스쿼트',machine:'머신',sets:[{kg:80,reps:null}]}]},
- renderEditor:()=>{renders++;host=null},v64Special:()=>false,v6Step:()=>2.5,historyFor:()=>[],fmt:String,esc:String});
+ nPick:()=>{},nSearch:()=>{},nManual:()=>{},nKey:x=>x.name,nEdit:'',renderEditor:()=>{renders++;host=null},v64Special:()=>false,v6Step:()=>2.5,historyFor:()=>[],fmt:String,esc:String});
  const before=JSON.stringify(ctx.draft);
  vm.runInContext(otaR1,ctx);assert(host.innerHTML.includes('40kg')&&host.innerHTML.includes('60kg'));
- assert.equal(header.textContent,'DISCIPLINE · STRENGTH / V6.4.2-r1');assert.equal(listeners.length,1);
+ assert.equal(header.textContent,'DISCIPLINE · STRENGTH / V6.4.2-r2');assert.equal(listeners.length,1);
  vm.runInContext(otaR1,ctx);assert.equal(listeners.length,1);
  ctx.renderEditor();assert.equal(renders,1);assert(host.innerHTML.includes('60kg'));assert.equal(JSON.stringify(ctx.draft),before);
  ctx.draft.exercises[0].sets[0].kg=100;listeners[0]({target:{dataset:{field:'kg'}}});
  assert(host.innerHTML.includes('50kg')&&host.innerHTML.includes('75kg'));
  console.log('OTA r1 warm-up integration tests PASS');
 }
+
+// Serving conversion is a view/snapshot transform, not a migration of existing logs.
+const servingSrc=otaR1.slice(otaR1.indexOf('function sanaiMealServing('),otaR1.indexOf('function installMealServing('));
+const servingCtx=vm.createContext({});
+vm.runInContext(servingSrc,servingCtx);
+const servingChecks=vm.runInContext(`(()=>{
+ const rice={name:'흰쌀밥',unit:'g',base:100,portion:210,kcal:130,p:2.7,c:28.2,f:0.3};
+ const stew={name:'된장찌개 (일반)',unit:'g',base:100,portion:300,kcal:55,p:3.5,c:4,f:2.8};
+ const chicken={...rice,name:'닭가슴살 (익힌 것)'};
+ const protein={...rice,name:'마이프로틴',scoop:true};
+ const unknown={...rice,name:'김밥',portion:100,foodCode:'D101'};
+ const existing={...rice,unit:'인분',base:1,portion:1};
+ const before=JSON.stringify(rice);
+ const result=sanaiMealServing(rice);
+ return {result,stew:sanaiMealServing(stew),unchanged:before===JSON.stringify(rice),chicken:sanaiMealServing(chicken)===chicken,protein:sanaiMealServing(protein)===protein,unknown:sanaiMealServing(unknown)===unknown,existing:sanaiMealServing(existing)===existing};
+})()`,servingCtx);
+assert.equal(servingChecks.result.unit,'인분');assert.equal(servingChecks.result.base,1);assert.equal(servingChecks.result.portion,1);assert.equal(servingChecks.result.kcal,273);assert.equal(servingChecks.stew.kcal,165);assert(servingChecks.unchanged&&servingChecks.chicken&&servingChecks.protein&&servingChecks.unknown&&servingChecks.existing);
+console.log('OTA r2 serving conversion tests PASS');
