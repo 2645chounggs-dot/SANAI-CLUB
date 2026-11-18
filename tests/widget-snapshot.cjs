@@ -67,24 +67,27 @@ assert(wuResult.unchanged);assert.equal(wuResult.editing,null);assert.equal(wuRe
 assert.equal(wuResult.small.length,0);assert.equal(wuResult.duplicate.length,1);assert.equal(wuResult.invalid.length,0);
 assert(html56.includes('id="sanai-warmup"'));assert(html56.includes('refreshWarmup()'));console.log('V6.4.3 warm-up tests PASS');
 
-// OTA r1: apply in an existing page, refresh on edit, reapply safely, preserve draft.
+// OTA V6.4.3-r1: apply on native 70 only, preserve built-in workout and old log edits.
 const otaR1=fs.readFileSync('ota/patch.js','utf8');
 new vm.Script(otaR1);
-if(otaR1.includes('__sanaiWarmupR1')){
- const header={textContent:'DISCIPLINE · STRENGTH / V6.4.2'};
- let host=null, renders=0, listeners=[];
- const natural={before:x=>{host=x}};
- const ctx=vm.createContext({window:{},document:{querySelector:()=>header,getElementById:()=>host,createElement:()=>({id:'',innerHTML:''})},
- main:{querySelector:()=>natural,addEventListener:(name,fn)=>listeners.push(fn)},tab:'edit',draft:{part:'하체',exercises:[{name:'브이스쿼트',machine:'머신',sets:[{kg:80,reps:null}]}]},
- nPick:()=>{},nSearch:()=>{},nManual:()=>{},nKey:x=>x.name,nEdit:'',renderEditor:()=>{renders++;host=null},v64Special:()=>false,v6Step:()=>2.5,historyFor:()=>[],fmt:String,esc:String});
- const before=JSON.stringify(ctx.draft);
- vm.runInContext(otaR1,ctx);assert(host.innerHTML.includes('40kg')&&host.innerHTML.includes('60kg'));
- assert.equal(header.textContent,'DISCIPLINE · STRENGTH / V6.4.2-r2');assert.equal(listeners.length,1);
- vm.runInContext(otaR1,ctx);assert.equal(listeners.length,1);
- ctx.renderEditor();assert.equal(renders,1);assert(host.innerHTML.includes('60kg'));assert.equal(JSON.stringify(ctx.draft),before);
- ctx.draft.exercises[0].sets[0].kg=100;listeners[0]({target:{dataset:{field:'kg'}}});
- assert(host.innerHTML.includes('50kg')&&host.innerHTML.includes('75kg'));
- console.log('OTA r1 warm-up integration tests PASS');
+{
+ const header={textContent:'DISCIPLINE · STRENGTH / V6.4.3'};
+ const calls=[];
+ const originalEditor=()=>{};
+ const originalPick=(x,amount)=>calls.push({x,amount});
+ const ctx=vm.createContext({window:{},document:{querySelector:()=>header,getElementById:()=>null},
+ main:{},tab:'edit',nEdit:'',nPick:originalPick,nSearch:()=>{},nManual:()=>{},nKey:x=>x.name,renderEditor:originalEditor});
+ vm.runInContext(otaR1,ctx);
+ assert.equal(header.textContent,'DISCIPLINE · STRENGTH / V6.4.3-r1');
+ assert.equal(ctx.renderEditor,originalEditor);
+ const wrapped=ctx.nPick;vm.runInContext(otaR1,ctx);assert.equal(ctx.nPick,wrapped);
+ const rice={name:'흰쌀밥',unit:'g',base:100,portion:210,kcal:130,p:2.7,c:28.2,f:0.3};
+ ctx.nPick(rice);assert.equal(calls[0].x.unit,'인분');assert.equal(calls[0].amount,1);assert.equal(calls[0].x.kcal,273);
+ ctx.nEdit='old-log';ctx.nPick(rice,100);assert.equal(calls[1].x.unit,'g');assert.equal(calls[1].amount,100);
+ assert.equal(rice.unit,'g');assert.equal(rice.kcal,130);
+ const other=vm.createContext({window:{},document:{querySelector:()=>({textContent:'V6.4.2'})},main:{},renderEditor:originalEditor,nPick:originalPick});
+ vm.runInContext(otaR1,other);assert.equal(other.nPick,originalPick);
+ console.log('OTA native 70 serving integration tests PASS');
 }
 
 // Serving conversion is a view/snapshot transform, not a migration of existing logs.
