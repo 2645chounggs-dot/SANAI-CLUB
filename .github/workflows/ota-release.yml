@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       native_version:
-        description: 'Target installed APK versionCode, e.g. 69'
+        description: 'Target installed APK versionCode, e.g. 70'
         required: true
-        default: '69'
+        default: '70'
       revision:
         description: 'Increasing positive patch revision'
         required: true
@@ -48,6 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$SANAI_KEYSTORE_B64" && test -n "$SANAI_STORE_PASSWORD"
+          test "$NATIVE_VERSION" = 70 # current patch targets V6.4.3; change with next native baseline
           node --check ota/patch.js
           node tests/widget-snapshot.cjs
           export SANAI_KEYSTORE="$RUNNER_TEMP/sanai.p12"
