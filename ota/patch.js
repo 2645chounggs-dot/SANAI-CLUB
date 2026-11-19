@@ -168,7 +168,7 @@ if(tab==='nutrition')renderNutrition();
 if(window.__sanaiOnlineSearch||typeof nOnline!=='function'||!document.querySelector('.eyebrow')?.textContent.includes('V6.4.4'))return;
 window.__sanaiOnlineSearch=true;
 function onlineUrl(q){
- return 'https://search.openfoodfacts.org/search?q='+encodeURIComponent(q)+'&langs=ko%2Cen&page_size=25&fields=code%2Cproduct_name%2Cproduct_name_ko%2Cproduct_name_en%2Cbrands%2Cnutriments%2Cserving_quantity';
+ return 'https://search.openfoodfacts.org/search?q='+encodeURIComponent(q)+'&langs=ko%2Cen&page_size=25&fields=code%2Cproduct_name%2Cproduct_name_ko%2Cproduct_name_en%2Cbrands%2Cnutriments';
 }
 function textValue(x){if(typeof x==='string')return x.trim();if(Array.isArray(x))return x.map(textValue).filter(Boolean).join(', ');if(x&&typeof x==='object')return textValue(x.ko)||textValue(x.en)||textValue(x.main)||textValue(x.value)||Object.values(x).map(textValue).find(Boolean)||'';return '';}
 function onlineFoods(data,q){
@@ -182,7 +182,7 @@ function onlineFoods(data,q){
   const brand=textValue(x.brands);if(!name)continue;if(brand&&!name.includes(brand))name+=' · '+brand;
   const key=String(x.code||name);if(seen.has(key))continue;seen.add(key);
   const y={name,alias:brand+' '+q,base:100,unit:'g',kcal:+vals[0],p:+vals[1],c:+vals[2],f:+vals[3],source:'Open Food Facts · 사용자 등록 제품 DB · 제품 라벨 확인'};
-  const grams=Number(x.serving_quantity);if(Number.isFinite(grams)&&grams>0&&grams<=1000)y.portion=grams;
+  // Product nutrition is always imported on the declared 100 g basis; no serving-weight inference.
   if(nValidFood(y))out.push(y);
  }
  return out;
