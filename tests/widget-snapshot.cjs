@@ -107,3 +107,17 @@ const servingChecks=vm.runInContext(`(()=>{
 })()`,servingCtx);
 assert.equal(servingChecks.result.unit,'인분');assert.equal(servingChecks.result.base,1);assert.equal(servingChecks.result.portion,1);assert.equal(servingChecks.result.kcal,273);assert.equal(servingChecks.stew.kcal,165);assert(servingChecks.unchanged&&servingChecks.chicken&&servingChecks.protein&&servingChecks.unknown&&servingChecks.existing);
 console.log('OTA r2 serving conversion tests PASS');
+
+// V6.4.4: local logical date, 04:00 boundary, month/year and weekly rollover.
+const daySrc=html56.split('\n').find(l=>l.startsWith('const dateNow='));
+const weekSrc=html56.split('\n').find(l=>l.startsWith('function weekRange('));
+let now=new Date(2026,10,20,3,59,59,999);
+const dayCtx=vm.createContext({Date:class extends Date{constructor(...args){super(...(args.length?args:[now.getTime()]));}},weekOffset:0});
+vm.runInContext(daySrc+'\n'+weekSrc,dayCtx);
+for(const [y,m,d,h,min,expected] of [[2026,10,20,0,0,'2026-11-19'],[2026,10,20,3,59,'2026-11-19'],[2026,10,20,4,0,'2026-11-20'],[2027,0,1,2,0,'2026-12-31'],[2028,2,1,3,0,'2028-02-29']]){
+ now=new Date(y,m,d,h,min);assert.equal(vm.runInContext('dateNow()',dayCtx),expected);
+}
+now=new Date(2026,10,23,3,59);assert.equal(JSON.stringify(vm.runInContext('weekRange()',dayCtx)),JSON.stringify(['2026-11-16','2026-11-22']));
+now=new Date(2026,10,23,4,0);assert.equal(JSON.stringify(vm.runInContext('weekRange()',dayCtx)),JSON.stringify(['2026-11-23','2026-11-29']));
+assert.equal((fs.readFileSync('app/src/main/java/club/sanai/app/WidgetState.java','utf8').match(/LocalDateTime\.now\(\)\.minusHours\(4\)\.toLocalDate\(\)/g)||[]).length,2);
+console.log('V6.4.4 training day boundary tests PASS');
