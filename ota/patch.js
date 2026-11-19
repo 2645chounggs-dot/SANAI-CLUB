@@ -23,8 +23,8 @@ function sameName(a,b){return norm(a)===norm(b)||lookupName(a)===lookupName(b);}
 function matching(e,rows=historyRows()){return rows.find(r=>sameName(r.name,e.name)&&norm(r.machine)===norm(e.machine));}
 function exactChoice(e,rows=historyRows()){
  const matches=rows.filter(r=>sameName(r.name,e.name));const same=matches.filter(r=>norm(r.machine)===norm(e.machine));
- if(same.length)return same[0];
- if(!e.machine.trim()&&new Set(matches.map(r=>norm(r.machine))).size===1)return matches[0];
+ if(e.machine.trim())return same[0]||null;
+ if(new Set(matches.map(r=>norm(r.machine))).size===1)return matches[0];
  return null;
 }
 function restore(e,r,keepCount=false){
@@ -42,8 +42,10 @@ function score(r,q,machineField=false){
  if(n===v||n===a||aliasesFor.includes(v))return 100;
  if(n.startsWith(v)||aliasesFor.some(x=>x.startsWith(v)))return 70;
  if(n.includes(v)||m.includes(v)||aliasesFor.some(x=>x.includes(v)))return 40;
+ if(/^[ㄱ-ㅎ]+$/.test(String(q).replace(/\s+/g,''))&&initials(r.name).includes(String(q).replace(/\s+/g,'')))return 35;
  return -1;
 }
+const initials=s=>Array.from(norm(s),c=>{const n=c.charCodeAt(0)-44032;return n>=0&&n<11172?'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'[Math.floor(n/588)]:c;}).join('');
 const originalPrevious=previous;
 previous=function(e){const r=matching(e);return r?`직전 훈련 ${r.date.slice(5)} · ${groupSets(r.e)}`:originalPrevious(e);};
 const originalGuide=addGuide;
@@ -52,6 +54,16 @@ const originalAlternative=chooseAlternative;
 chooseAlternative=function(j,i){const old=draft?.exercises[i];originalAlternative(j,i);const e=draft?.exercises[i];if(i>=0&&e&&e!==old){const r=matching(e);if(r){restore(e,r);refreshEdit();}}};
 const originalCustom=startCustom;
 startCustom=function(i,edit=false){const before=draft;originalCustom(i,edit);if(!edit&&draft&&draft!==before){for(const e of draft.exercises){const r=matching(e);if(r)restore(e,r,true);}refreshEdit();}};
+const originalFinish=finish;
+finish=function(){
+ if(draft&&!draft.editingId){
+  const rows=historyRows();
+  for(const e of draft.exercises){const r=matching(e,rows);if(r){e.name=r.name;e.machine=r.machine;}
+   else {const n=guideExercises.find(g=>norm(g[1])===norm(e.name));if(n)e.name=n[1];}
+  }
+ }
+ return originalFinish();
+};
 const oldRender=renderEditor;
 function fieldInput(t){return t instanceof HTMLInputElement&&t.dataset.ex!==undefined&&['name','machine'].includes(t.dataset.field)&&t.dataset.set===undefined;}
 function clearMenus(){main.querySelectorAll('.sanai-ex-suggest').forEach(x=>x.remove());}
@@ -101,4 +113,5 @@ main.addEventListener('change',ev=>{
 main.addEventListener('keydown',ev=>{if(!fieldInput(ev.target))return;if(ev.key==='Escape'){clearMenus();return;}if(ev.key==='ArrowDown'){const b=ev.target.nextElementSibling?.querySelector('button');if(b){ev.preventDefault();b.focus();}}});
 document.addEventListener('click',ev=>{if(!fieldInput(ev.target)&&!ev.target.closest('.sanai-ex-suggest')&&!ev.target.closest('button')?.textContent.includes('이전 운동 종목 추가'))clearMenus();});
 if(tab==='edit')renderEditor();
+const header=document.querySelector('.eyebrow');if(header&&!header.textContent.includes('-r1'))header.textContent+='-r1';
 })();
