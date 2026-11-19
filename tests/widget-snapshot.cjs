@@ -138,3 +138,10 @@ console.log('V6.4.4 training day boundary tests PASS');
  const mc=vm.createContext({});vm.runInContext(macroSrc,mc);
  const macroCheck=vm.runInContext(`(()=>{const g=macroGoals(71,142,0,{c:0,f:0}),custom=macroGoals(71,142,2200,{c:200,f:60});return [g.c===213,g.f===57,g.p===142,custom.c===200,custom.f===60,macroStatus(79,100,true).kind==='low',macroStatus(79,100,false).kind==='pending',macroStatus(80,100,true).kind==='ok',macroStatus(120,100,true).kind==='ok',macroStatus(121,100,false).kind==='high',macroSettings({c:-1,f:900}).c===0,macroSettings({c:-1,f:900}).f===0];})()`,mc);
  assert(macroCheck.every(Boolean));console.log('OTA native 71 macro warning tests PASS');
+
+ // New online full-text API mapping: Korean query, nutrition completeness, dedupe, and no implicit serving size.
+ const onlineSrc=ota71.slice(ota71.indexOf('function onlineUrl('),ota71.indexOf('const cache=new Map();'));
+ const onlineCtx=vm.createContext({nValidFood:x=>x&&typeof x.name==='string'&&x.name.trim()&&['kcal','p','c','f'].every(k=>Number.isFinite(x[k])&&x[k]>=0)});
+ vm.runInContext(onlineSrc,onlineCtx);
+ const onlineChecks=vm.runInContext(`(()=>{const n={'energy-kcal_100g':70,proteins_100g:3,carbohydrates_100g:9,fat_100g:2};const data={hits:[{code:'1',product_name_ko:'초코우유',brands:'테스트',nutriments:n},{code:'1',product_name:'duplicate',nutriments:n},{code:'2',product_name:'missing',nutriments:{proteins_100g:1}},{code:'3',product_name:{main:'milk'},nutriments:n},{code:'4',product_name:'zero',nutriments:{'energy-kcal_100g':0,proteins_100g:0,carbohydrates_100g:0,fat_100g:0}}]};const rows=onlineFoods(data,'우유');return [rows.length===3,rows[0].name==='초코우유 · 테스트',rows[1].name==='milk',rows[2].kcal===0,rows.every(x=>x.base===100&&x.unit==='g'&&!x.portion),onlineUrl('짬뽕').includes('search.openfoodfacts.org/search?q='+encodeURIComponent('짬뽕')),onlineFoods({hits:[]},'우유').length===0];})()`,onlineCtx);
+ assert(onlineChecks.every(Boolean));assert.throws(()=>vm.runInContext("onlineFoods({errors:[]},'우유')",onlineCtx));console.log('OTA native 71 online search mapping tests PASS');
