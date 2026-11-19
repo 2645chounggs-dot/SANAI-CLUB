@@ -674,4 +674,57 @@ renderNutrition=function(){
 if(tab==='nutrition')renderNutrition();
 })();
 
+</script><script>
+(function sanaiOnlineSearch(){
+'use strict';
+if(window.__sanaiOnlineSearch||typeof nOnline!=='function')return;
+window.__sanaiOnlineSearch=true;
+function onlineUrl(q){
+ return 'https://search.openfoodfacts.org/search?q='+encodeURIComponent(q)+'&langs=ko%2Cen&page_size=25&fields=code%2Cproduct_name%2Cproduct_name_ko%2Cproduct_name_en%2Cbrands%2Cnutriments';
+}
+function textValue(x){if(typeof x==='string')return x.trim();if(Array.isArray(x))return x.map(textValue).filter(Boolean).join(', ');if(x&&typeof x==='object')return textValue(x.ko)||textValue(x.en)||textValue(x.main)||textValue(x.value)||Object.values(x).map(textValue).find(Boolean)||'';return '';}
+function onlineFoods(data,q){
+ if(!data||!Array.isArray(data.hits))throw Error('응답 형식 오류');
+ const seen=new Set(),out=[];
+ for(const raw of data.hits){
+  const x=raw?._source||raw;if(!x||typeof x!=='object')continue;
+  const n=x.nutriments||{},vals=[n['energy-kcal_100g'],n.proteins_100g,n.carbohydrates_100g,n.fat_100g];
+  if(vals.some(v=>v==null||v===''||!Number.isFinite(Number(v))||Number(v)<0))continue;
+  let name=textValue(x.product_name_ko)||textValue(x.product_name)||textValue(x.product_name_en)||textValue(x.product_name_main);
+  const brand=textValue(x.brands);if(!name)continue;if(brand&&!name.includes(brand))name+=' · '+brand;
+  const key=String(x.code||name);if(seen.has(key))continue;seen.add(key);
+  const y={name,alias:brand+' '+q,base:100,unit:'g',kcal:+vals[0],p:+vals[1],c:+vals[2],f:+vals[3],source:'Open Food Facts · 사용자 등록 제품 DB · 제품 라벨 확인'};
+  // Product nutrition is always imported on the declared 100 g basis; no serving-weight inference.
+  if(nValidFood(y))out.push(y);
+ }
+ return out;
+}
+const cache=new Map();let active=null,lastRequest=0;
+nOnline=async function(){
+ const q=nQuery.trim(),el=document.getElementById('n-online-msg');
+ if(!el)return;if(q.length<2){el.textContent='검색어를 2글자 이상 입력해라.';return;}
+ const key=q.toLowerCase().replace(/\s+/g,'');
+ if(active?.key===key)return;
+ const cached=cache.get(key);if(cached&&Date.now()-cached.time<300000){++nRequest;if(active)active.controller.abort();nRemote=cached.foods;el.textContent=nRemote.length?`제품 ${nRemote.length}개 찾음 · 라벨 확인`:'제품 DB에 완전한 영양성분이 등록된 결과 없음. 일반 음식은 내장 DB를 이용해라.';nSearch();return;}
+ if(Date.now()-lastRequest<6500){el.textContent='검색 요청 간격 제한 · 잠시 후 다시 검색해라.';return;}
+ if(active)active.controller.abort();
+ const controller=new AbortController(),req=++nRequest;active={key,controller};lastRequest=Date.now();
+ const timer=setTimeout(()=>controller.abort(),18000);
+ nRemote=[];nSearch();el.textContent='온라인 제품 DB 검색 중…';
+ const current=()=>req===nRequest&&tab==='nutrition'&&q===nQuery.trim();
+ try{
+  const res=await fetch(onlineUrl(q),{method:'GET',signal:controller.signal,headers:{Accept:'application/json'},credentials:'omit'});
+  if(!res.ok)throw Error('HTTP '+res.status);
+  const data=await res.json(),foods=onlineFoods(data,q);
+  if(cache.size>=30)cache.delete(cache.keys().next().value);
+  cache.set(key,{time:Date.now(),foods});
+  if(!current())return;nRemote=foods;el.textContent=foods.length?`제품 ${foods.length}개 찾음 · 실제 제품 라벨과 대조해라.`:'제품 DB에 완전한 영양성분이 등록된 결과 없음. 짬뽕 등 일반 식사는 내장 DB를 이용해라.';nSearch();
+ }catch(e){
+  if(!current())return;
+  const reason=e?.name==='AbortError'?'응답 시간 초과':/^HTTP \d+$/.test(e?.message||'')?e.message:e?.message==='응답 형식 오류'?e.message:'네트워크/서버 연결 오류';
+  el.textContent='온라인 검색 실패 ('+reason+'). 내장 DB는 사용 가능. 잠시 후 다시 시도해라.';
+ }finally{clearTimeout(timer);if(active?.controller===controller)active=null;}
+};
+})();
+
 </script></body></html>
