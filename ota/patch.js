@@ -1,4 +1,4 @@
-/* SANAI V6.4.4 r1 · per-exercise history + autocomplete; native 71 */
+/* SANAI V6.4.4 r2 · exercise history + macro alerts; native 71 */
 (function sanaiExerciseMemory(){
 'use strict';
 if(window.__sanaiExerciseMemory||typeof renderEditor!=='function'||!document.querySelector('.eyebrow')?.textContent.includes('V6.4.4'))return;
@@ -113,5 +113,52 @@ main.addEventListener('change',ev=>{
 main.addEventListener('keydown',ev=>{if(!fieldInput(ev.target))return;if(ev.key==='Escape'){clearMenus();return;}if(ev.key==='ArrowDown'){const b=ev.target.nextElementSibling?.querySelector('button');if(b){ev.preventDefault();b.focus();}}});
 document.addEventListener('click',ev=>{if(!fieldInput(ev.target)&&!ev.target.closest('.sanai-ex-suggest')&&!ev.target.closest('button')?.textContent.includes('이전 운동 종목 추가'))clearMenus();});
 if(tab==='edit')renderEditor();
-const header=document.querySelector('.eyebrow');if(header&&!header.textContent.includes('-r1'))header.textContent+='-r1';
+const header=document.querySelector('.eyebrow');if(header)header.textContent=header.textContent.replace(/-r\d+$/,'');
 })();
+
+(function sanaiMacroAlerts(){
+'use strict';
+if(window.__sanaiMacroAlerts||typeof renderNutrition!=='function'||!document.querySelector('.eyebrow')?.textContent.includes('V6.4.4'))return;
+window.__sanaiMacroAlerts=true;
+function macroSettings(x){return {c:Number.isFinite(x?.c)&&x.c>=0&&x.c<=1000?x.c:0,f:Number.isFinite(x?.f)&&x.f>=0&&x.f<=500?x.f:0};}
+function macroGoals(weight,protein,kcal,custom){
+ const p=protein, f=custom.f||Math.max(1,Math.round(kcal>0?kcal*.25/9:weight*.8));
+ const c=custom.c||Math.max(1,Math.round(kcal>0?(kcal-p*4-f*9)/4:weight*3));
+ return {c,p,f};
+}
+function macroStatus(value,target,late){
+ const pct=value/target*100;
+ return {pct,kind:pct>120?'high':pct<80?(late?'low':'pending'):'ok'};
+}
+const oldClean=nClean;
+nClean=function(x){const d=oldClean(x);d.macroGoals=macroSettings(x?.macroGoals);return d;};
+nutrition.macroGoals=macroSettings(read(NUTKEY,null)?.macroGoals);
+const oldRender=renderNutrition;
+renderNutrition=function(){
+ oldRender();
+ const rows=nutrition.logs.filter(x=>x.date===nDate),t=nTotals(rows),custom=macroSettings(nutrition.macroGoals),targets=macroGoals(nutrition.weight,nTarget(),v6.kcal,custom);
+ const late=nDate<dateNow()||(nDate===dateNow()&&(new Date().getHours()>=21||new Date().getHours()<4));
+ const panel=document.createElement('section');panel.className='panel stack';panel.id='sanai-macro-alerts';
+ const heading=document.createElement('h3');heading.textContent='탄·단·지 보급 경고';panel.append(heading);
+ const info=document.createElement('p');info.className='notice';info.textContent='목표 대비 80~120%를 기준으로 표시한다. 부족 경고는 21시 이후 또는 지난 날짜에 표시한다. 기록 기준이며 의학적 과다·결핍 진단은 아니다.';panel.append(info);
+ for(const [k,label] of [['c','탄수화물'],['p','단백질'],['f','지방']]){
+  const target=targets[k],value=t[k],s=macroStatus(value,target,late&&rows.length>0);
+  const line=document.createElement('div');line.style.cssText='padding:8px 0;border-bottom:1px solid var(--line)';
+  const top=document.createElement('div');top.className='row between';
+  const title=document.createElement('b');title.textContent=label+' '+nFmt(value)+' / '+nFmt(target)+'g';top.append(title);
+  const status=document.createElement('span');status.textContent=rows.length===0?'기록 없음':s.kind==='high'?'⚠ 목표 초과':s.kind==='low'?'⚠ 목표 부족':s.kind==='pending'?'보급 진행 중':'적정 범위';status.style.color=s.kind==='high'?'#ff7474':s.kind==='low'?'#ffc65a':s.kind==='ok'?'#8ed9a5':'var(--muted)';top.append(status);line.append(top);
+  const bar=document.createElement('div');bar.className='n-track';bar.style.marginTop='8px';const fill=document.createElement('div');fill.style.width=Math.min(100,s.pct)+'%';fill.style.background=s.kind==='high'?'#ef4444':s.kind==='low'?'#e9ad45':'#7dbb92';bar.append(fill);line.append(bar);
+  const msg=document.createElement('small');msg.className='notice';msg.textContent=rows.length===0?'섭취한 음식을 기록해라.':s.kind==='high'?nFmt(value-target)+'g 목표 초과 · 다음 식사는 균형 있게':s.kind==='low'?'목표까지 '+nFmt(target-value)+'g 남음 · 필요한 만큼 보급':s.kind==='pending'?'목표까지 '+nFmt(target-value)+'g 남음':Math.round(s.pct)+'% · 목표 범위 내';line.append(msg);panel.append(line);
+ }
+ const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='탄수화물·지방 목표 직접 설정';details.append(summary);
+ const form=document.createElement('form');form.className='stack';form.id='sanai-macro-goals';
+ for(const [k,label,max] of [['c','탄수화물 (g)',1000],['f','지방 (g)',500]]){const l=document.createElement('label');l.className='field';l.textContent=label+' · 0 = 자동';const input=document.createElement('input');input.type='number';input.name=k;input.min='0';input.max=String(max);input.step='1';input.required=true;input.value=String(custom[k]);l.append(input);form.append(l);}
+ const save=document.createElement('button');save.type='submit';save.className='primary';save.textContent='탄·지 목표 저장';form.append(save);
+ const note=document.createElement('p');note.className='notice';note.textContent='자동 목표: 칼로리 설정 시 지방 25% 및 단백질 목표 제외 후 탄수화물 배정. 미설정 시 체중당 탄수화물 3g, 지방 0.8g을 출발점으로 사용한다.';form.append(note);
+ form.addEventListener('submit',ev=>{ev.preventDefault();const d=Object.fromEntries(new FormData(form));if(nSave({...nutrition,macroGoals:macroSettings({c:+d.c,f:+d.f})})){renderNutrition();notify('탄·지 목표 저장 완료');}});
+ details.append(form);panel.append(details);
+ const anchor=main.querySelector('.n-stats');if(anchor)anchor.insertAdjacentElement('afterend',panel);else main.querySelector('.titlebar')?.insertAdjacentElement('afterend',panel);
+};
+if(tab==='nutrition')renderNutrition();
+})();
+(()=>{const h=document.querySelector('.eyebrow');if(h?.textContent.includes('V6.4.4'))h.textContent=h.textContent.replace(/-r\d+$/,'')+'-r2';})();
