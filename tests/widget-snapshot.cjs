@@ -68,7 +68,7 @@ assert.equal(wuResult.small.length,0);assert.equal(wuResult.duplicate.length,1);
 assert(html56.includes('id="sanai-warmup"'));assert(html56.includes('refreshWarmup()'));console.log('V6.4.3 warm-up tests PASS');
 
 // OTA V6.4.3-r1: apply on native 70 only, preserve built-in workout and old log edits.
-const otaR1=fs.readFileSync('ota/patch.js','utf8');
+const otaR1=fs.readFileSync('tests/fixtures/ota-native70.js','utf8');
 new vm.Script(otaR1);
 {
  const header={textContent:'DISCIPLINE · STRENGTH / V6.4.3'};
@@ -121,3 +121,20 @@ now=new Date(2026,10,23,3,59);assert.equal(JSON.stringify(vm.runInContext('weekR
 now=new Date(2026,10,23,4,0);assert.equal(JSON.stringify(vm.runInContext('weekRange()',dayCtx)),JSON.stringify(['2026-11-23','2026-11-29']));
 assert.equal((fs.readFileSync('app/src/main/java/club/sanai/app/WidgetState.java','utf8').match(/LocalDateTime\.now\(\)\.minusHours\(4\)\.toLocalDate\(\)/g)||[]).length,2);
 console.log('V6.4.4 training day boundary tests PASS');
+
+ // Native 71 OTA: current patch must parse, preserve old-version guard, and pass exercise + nutrition regressions.
+ const ota71=fs.readFileSync('ota/patch.js','utf8');
+ new vm.Script(ota71);
+ const guard71=vm.createContext({window:{},document:{querySelector:()=>({textContent:'V6.4.3'})},renderEditor:()=>{},renderNutrition:()=>{}});
+ vm.runInContext(ota71,guard71);assert(!guard71.window.__sanaiExerciseMemory&&!guard71.window.__sanaiMacroAlerts);
+ const exSrc=ota71.slice(ota71.indexOf('const norm='),ota71.indexOf('const originalPrevious='));
+ const mk=(name,machine,kg,n)=>({name,machine,sets:Array.from({length:n},()=>({kg,reps:10}))});
+ const old=mk('레그 익스텐션','해머 스트렝스',55,4),last=mk('레그익스텐션','해머스트렝스',60,5),otherMachine=mk('레그 익스텐션','뉴텍',40,3),omitted=mk('레그컬','뉴텍',50,4);
+ const exCtx=vm.createContext({aliases:{'레그 익스':'레그 익스텐션','컬':'레그컬'},sessions:[{id:'a',date:'2026-11-10',part:'하체',exercises:[old,otherMachine]},{id:'b',date:'2026-11-14',part:'하체',exercises:[last]},{id:'c',date:'2026-11-18',part:'하체',exercises:[omitted]}],draft:{date:'2026-11-20'},dateNow:()=> '2026-11-20',guideExercises:[],equipmentFor:()=>''});
+ vm.runInContext(exSrc,exCtx);
+ const exChecks=vm.runInContext(`(()=>{const rows=historyRows();const e={name:'레그 익스',machine:'해머 스트렝스',sets:[]};restore(e,matching(e));return [rows.length===3,e.sets.length===5,e.sets.every(t=>t.kg===60&&t.reps===null),matching({name:'레그익스텐션',machine:'뉴텍'}).e.sets[0].kg===40,exactChoice({name:'레그익스텐션',machine:''})===null,score(rows[1],'ㄹㄱㅇㅅ')>0,sessions[1].exercises[0].sets[0].reps===10];})()`,exCtx);
+ assert(exChecks.every(Boolean));console.log('OTA native 71 exercise memory tests PASS');
+ const macroSrc=ota71.slice(ota71.indexOf('function macroSettings('),ota71.indexOf('const oldClean=nClean;'));
+ const mc=vm.createContext({});vm.runInContext(macroSrc,mc);
+ const macroCheck=vm.runInContext(`(()=>{const g=macroGoals(71,142,0,{c:0,f:0}),custom=macroGoals(71,142,2200,{c:200,f:60});return [g.c===213,g.f===57,g.p===142,custom.c===200,custom.f===60,macroStatus(79,100,true).kind==='low',macroStatus(79,100,false).kind==='pending',macroStatus(80,100,true).kind==='ok',macroStatus(120,100,true).kind==='ok',macroStatus(121,100,false).kind==='high',macroSettings({c:-1,f:900}).c===0,macroSettings({c:-1,f:900}).f===0];})()`,mc);
+ assert(macroCheck.every(Boolean));console.log('OTA native 71 macro warning tests PASS');
