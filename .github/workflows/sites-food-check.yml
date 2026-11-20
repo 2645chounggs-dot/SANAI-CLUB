@@ -5,6 +5,7 @@ on:
       - 'sites-sync/**'
       - 'tests/sites-food-core.cjs'
       - 'tests/sites-merge.cjs'
+      - 'tests/sites-mcp-tools.cjs'
       - '.github/workflows/sites-food-check.yml'
   workflow_dispatch:
 permissions:
@@ -24,3 +25,5 @@ jobs:
           node tests/sites-food-core.cjs
           node --check sites-sync/client/merge.cjs
           node tests/sites-merge.cjs
+          node --check sites-sync/server/mcp-tools.cjs
+          node tests/sites-mcp-tools.cjs
