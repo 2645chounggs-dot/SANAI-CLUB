@@ -6,6 +6,7 @@ on:
       - 'tests/sites-food-core.cjs'
       - 'tests/sites-merge.cjs'
       - 'tests/sites-mcp-tools.cjs'
+      - 'tests/sites-device-api.cjs'
       - '.github/workflows/sites-food-check.yml'
   workflow_dispatch:
 permissions:
@@ -27,3 +28,5 @@ jobs:
           node tests/sites-merge.cjs
           node --check sites-sync/server/mcp-tools.cjs
           node tests/sites-mcp-tools.cjs
+          node --check sites-sync/server/device-api.cjs
+          node tests/sites-device-api.cjs
