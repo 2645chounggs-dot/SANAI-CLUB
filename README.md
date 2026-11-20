@@ -1,6 +1,24 @@
-# 사나이크럽 V5.5 — CHAD WIDGETS + UPDATE CENTER
+# 사나이크럽 V6.4.5 — ChatGPT 무료 식단 자동 연동
 
-V5.4 위젯 소스 기반. 기존 package `club.sanai.app`, minSdk 26, targetSdk 32, versionCode 55, WebView `file:///android_asset/index.html` 및 기존 localStorage 키 보존. 원본 V5.3 네이티브 소스는 없어 기존 APK에 맞춰 재구현한 래퍼를 사용한다. 데이터 보존 및 실제 설치는 반드시 검증한다.
+Android package `club.sanai.app`, minSdk 26, targetSdk 32, **versionCode 72 / versionName 6.4.5**. 기존 `ironlog.v5.nutrition` 및 운동 기록의 localStorage 키는 변경하지 않는다. 버전 업데이트는 동일한 기존 서명 인증서를 사용하는 APK로만 가능하다.
+
+## ChatGPT 식단 자동 연동 (별도 API/서버 요금 없음)
+
+- `app/src/main/java/club/sanai/app/SanaiFoodSync.java`: Android Keystore에서 RSA-3072 비밀키 생성·보관. 앱 열기/복귀, 포그라운드 30분마다 암호화된 GitHub 인박스를 확인.
+- `app/src/main/assets/sanai-food-sync.js`: `영양 보급소`에 연결 상태/복사/동기화 버튼 추가. 저장 전 식단 데이터 검증, 기존 기록에 병합, 동일 이벤트 ID 중복 방지. 로컬 저장 성공 후에만 수신 확인.
+- `tools/food_sync_encrypt.py`: 장치 공개키로 AES-256-GCM + RSA-OAEP(SHA-256, MGF1 SHA-1) 암호화한 식단 파일 생성. `python3 tools/food_sync_encrypt.py --self-test`로 암호화 왕복 및 위변조 검사.
+- `sync/devices/<device_uuid>.pem`: 장치별 **공개키만** 등록. `sync/inbox/YYYY-MM/<event_uuid>.json`: 내용이 암호화된 식단 이벤트만 보관. **식사명·영양값·개인 기록의 평문은 GitHub에 절대 올리지 않는다.** 저장소가 공개되므로 커밋 시각/암호문 크기 등의 메타데이터는 타인에게 보일 수 있다.
+
+최초 연결은 APK를 V6.4.5로 설치한 다음 **보급소 → ChatGPT 식단 자동 연동 → 연결키 복사**에서 JSON을 복사해 ChatGPT에 붙여넣고 `사나이크럽 연결`을 요청한다. 개인용 ChatGPT 플러그인 `사나이크럽 식단 연동`은 GitHub 연결을 이용해 해당 공개키를 저장한다. 이후 `사나이크럽 점심 제육볶음 1인분 기록해`처럼 요청하면 영양성분을 검색·계산해 암호화 이벤트 파일을 생성하며, 앱을 열면 자동 수신한다. **GitHub 업로드 성공과 실제 휴대폰 저장 성공은 다른 단계**이므로 혼동하지 말 것. 연결키 등록과 실기기 수신 테스트 전에는 자동 연동 완료로 안내하지 않는다.
+
+현재는 백그라운드 푸시 서비스가 없으며 앱을 닫아 둔 동안 실시간 갱신되지는 않는다. 이전 달까지는 매번, 더 오래된 월은 처음 한 번만 검사하는 구조(최대 12개월 전). APK 제거 시 Android Keystore 키가 소실될 수 있으니 기록을 백업하고 앱을 삭제하지 않는다. 별도 유료 API는 없지만 GitHub 무료 정책·API 요청 제한이 적용된다.
+
+**릴리스 주의:** V6.4.4(`versionCode 71`)의 OTA r4는 기존 기기용으로 유지한다. 새 암호화 수신부는 네이티브 기능이므로 OTA만으로 설치되지 않으며 V6.4.5 APK가 필요하다. PR 검사에는 서명 없이 디버그 APK 컴파일을 수행한다. 실제 릴리스는 기존 `native-release.yml` 및 동일 인증서 서명이 필요하며, 최종 설치와 데이터 보존은 실기기에서 검증해야 한다.
+
+---
+
+## 기존 배포/업데이트 문서 (구 버전 절차 포함)
+
 
 ## 최초 1회 설정 (GitHub Actions, PC Android Studio 불필요)
 1. GitHub 계정과 전용 저장소를 준비한다. 릴리스 다운로드를 무인증으로 하려면 공개 저장소가 필요하다. 이 ZIP에는 실제 개인 운동 기록이나 서명키가 포함되지 않는다. 공개 범위는 사용자 선택이다. 비공개 저장소를 원하면 인증된 별도 다운로드 서버가 필요하며 현재 구현은 지원하지 않는다.
