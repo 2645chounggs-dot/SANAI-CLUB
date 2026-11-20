@@ -6,6 +6,8 @@ on:
       - 'app/src/main/java/club/sanai/app/**'
       - 'app/build.gradle'
       - 'tools/food_sync_encrypt.py'
+      - 'tests/food-sync.cjs'
+      - 'tests/snack-recommendations.cjs'
       - '.github/workflows/food-sync-check.yml'
   workflow_dispatch:
 permissions:
@@ -34,6 +36,7 @@ jobs:
       - name: Static + encryption tests
         run: |
           node --check app/src/main/assets/sanai-food-sync.js
+          node tests/food-sync.cjs
           node tests/widget-snapshot.cjs
           node tests/snack-recommendations.cjs
           python3 -m pip install --user cryptography==46.0.4
