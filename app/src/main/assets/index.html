@@ -727,4 +727,116 @@ nOnline=async function(){
 };
 })();
 
+</script><script>
+(function sanaiSnackRecommendations(){
+'use strict';
+if(window.__sanaiSnackRecommendations||typeof renderNutrition!=='function'||typeof nTotals!=='function'||!document.querySelector('.eyebrow')?.textContent.includes('V6.4.4'))return;
+window.__sanaiSnackRecommendations=true;
+// Every ingredient comes from the existing local food DB, except the user's configured whey.
+const choices=[
+ {name:'프로틴 1스쿱',parts:[['@whey',1]]},
+ {name:'무가당 그릭요거트 200g',parts:[['그릭요거트 (무지방, 무가당)',200]]},
+ {name:'익힌 닭가슴살 100g',parts:[['닭가슴살 (익힌 것)',100]]},
+ {name:'삶은 달걀 2개',parts:[['삶은 달걀',100]]},
+ {name:'두부 150g',parts:[['두부',150]]},
+ {name:'무가당 두유 1팩',parts:[['두유 (무가당)',190]]},
+ {name:'바나나 1개',parts:[['바나나',120]]},
+ {name:'군고구마 150g',parts:[['고구마 (구운 것)',150]]},
+ {name:'오트밀 40g',parts:[['오트밀 (마른 것)',40]]},
+ {name:'통밀식빵 2장',parts:[['통밀 식빵',70]]},
+ {name:'현미밥 반 공기',parts:[['현미밥',105]]},
+ {name:'아몬드 한 줌',parts:[['아몬드',20]]},
+ {name:'모짜렐라 치즈 30g',parts:[['모짜렐라 치즈',30]]},
+ {name:'낫또 1팩',parts:[['낫또',50]]},
+ {name:'바나나 + 무가당 두유',parts:[['바나나',120],['두유 (무가당)',190]]},
+ {name:'그릭요거트 + 아몬드',parts:[['그릭요거트 (무지방, 무가당)',150],['아몬드',20]]},
+ {name:'삶은 달걀 + 통밀식빵',parts:[['삶은 달걀',100],['통밀 식빵',35]]},
+ {name:'프로틴 + 바나나',parts:[['@whey',1],['바나나',120]]}
+];
+const labels={p:'단백질',c:'탄수화물',f:'지방'};
+let shown=[];
+function getTargets(){
+ const custom=nutrition.macroGoals||{},protein=nTarget(),calories=Number(v6.kcal)||0;
+ const fat=custom.f>0?custom.f:Math.max(1,Math.round(calories>0?calories*.25/9:nutrition.weight*.8));
+ const carbs=custom.c>0?custom.c:Math.max(1,Math.round(calories>0?(calories-protein*4-fat*9)/4:nutrition.weight*3));
+ return {p:protein,c:carbs,f:fat};
+}
+function buildChoices(){
+ return choices.map(c=>{
+  const items=c.parts.map(([name,amount])=>{
+   const food=name==='@whey'?nProteinFood():nBuilt.find(x=>x.name===name);
+   return food&&{food,amount:name==='@whey'?food.base:amount};
+  });
+  if(items.some(x=>!x||!nValidFood(x.food)))return null;
+  return {name:c.name,items,total:nTotals(items.map(x=>({...x.food,amount:x.amount})))};
+ }).filter(Boolean);
+}
+function snackScore(option,t,targets,lacking){
+ let gain=0,excess=0;
+ for(const k of ['p','c','f']){
+  const need=Math.max(0,targets[k]-t[k]);
+  if(lacking.includes(k))gain+=Math.min(need,option.total[k])/targets[k]*(k==='p'?3:2.5);
+  excess+=Math.max(0,t[k]+option.total[k]-targets[k]*1.2)/targets[k];
+ }
+ return gain-excess*.8-option.total.kcal*.00015;
+}
+function addNote(panel,message){
+ const note=document.createElement('p');note.className='notice';note.textContent=message;panel.append(note);
+}
+function renderSnacks(){
+ document.getElementById('sanai-snack-rec')?.remove();
+ shown=[];
+ const anchor=main.querySelector('#sanai-macro-alerts')||main.querySelector('.n-stats');
+ if(!anchor)return;
+ const panel=document.createElement('section');panel.className='panel stack';panel.id='sanai-snack-rec';
+ const title=document.createElement('h3');title.textContent='🥣 부족 영양 보충 · 간편 간식';panel.append(title);
+ const rows=nutrition.logs.filter(x=>x.date===nDate),totals=nTotals(rows),targets=getTargets();
+ if(!rows.length){
+  addNote(panel,'식사 기록을 1개 이상 추가하면 부족한 탄단지에 맞춰 추천한다.');
+ }else{
+  const lacking=['p','c','f'].filter(k=>totals[k]<targets[k]*.8);
+  const budget=Number(v6.kcal)||0,remaining=budget-totals.kcal;
+  if(!lacking.length){
+   addNote(panel,'탄단지가 설정된 적정 범위에 도달했다. 억지로 간식을 먹을 필요 없다.');
+  }else if(budget>0&&remaining<=0){
+   addNote(panel,'설정한 칼로리 목표에 이미 도달했다. 추가 간식보다 식단 기록과 목표를 먼저 확인해라.');
+  }else{
+   addNote(panel,lacking.map(k=>labels[k]+' '+nFmt(Math.max(0,targets[k]-totals[k]))+'g 남음').join(' · '));
+   let ranked=buildChoices().filter(o=>budget<=0||o.total.kcal<=remaining*1.05).map(o=>({...o,score:snackScore(o,totals,targets,lacking)})).filter(o=>o.score>.05).sort((a,b)=>b.score-a.score);
+   const selected=[];
+   for(const k of [...lacking].sort((a,b)=>totals[a]/targets[a]-totals[b]/targets[b])){
+    const best=ranked.filter(o=>!selected.includes(o)&&o.total[k]>=5).sort((a,b)=>(b.score+b.total[k]/targets[k])-(a.score+a.total[k]/targets[k]))[0];
+    if(best)selected.push(best);
+   }
+   for(const item of ranked)if(selected.length<5&&!selected.includes(item))selected.push(item);
+   shown=selected.slice(0,5);
+   for(let i=0;i<shown.length;i++){
+    const item=shown[i],line=document.createElement('div');line.className='n-fav-row';
+    const info=document.createElement('div');info.style.flex='1';info.style.minWidth='0';
+    const name=document.createElement('b');name.textContent=item.name;info.append(name);
+    const values=document.createElement('small');values.style.display='block';values.textContent=nFmt(item.total.kcal)+' kcal · 단 '+nFmt(item.total.p)+'g · 탄 '+nFmt(item.total.c)+'g · 지 '+nFmt(item.total.f)+'g';info.append(values);
+    const detail=document.createElement('small');detail.style.display='block';detail.textContent='기본 식품 추정치 · 제품별 라벨 확인';info.append(detail);
+    const button=document.createElement('button');button.type='button';button.className='primary';button.dataset.sanaiSnack=String(i);button.textContent='＋ 간식 기록';
+    line.append(info,button);panel.append(line);
+   }
+   if(!shown.length)addNote(panel,'현재 칼로리 여유와 부족량에 맞는 간식이 없다. 목표 또는 기록을 확인해라.');
+  }
+ }
+ addNote(panel,'추천은 기록된 탄단지와 설정 목표를 비교한 참고용이다. 실제 결핍 진단이 아니며 누르면 선택 날짜에 간식으로 기록한다.');
+ anchor.insertAdjacentElement('afterend',panel);
+}
+const previousRender=renderNutrition;
+renderNutrition=function(){previousRender();renderSnacks();};
+main.addEventListener('click',event=>{
+ const btn=event.target.closest('[data-sanai-snack]');
+ if(tab!=='nutrition'||!btn||!main.contains(btn))return;
+ const index=Number(btn.dataset.sanaiSnack),item=shown[index];
+ if(!Number.isInteger(index)||!item)return;
+ const nextLogs=item.items.map(({food,amount})=>({...food,id:uid(),amount,date:nDate,meal:'간식'}));
+ if(nSave({...nutrition,logs:[...nutrition.logs,...nextLogs]})){
+  nChoice=null;nEdit='';renderNutrition();notify(item.name+' · 간식 기록 완료');
+ }
+});
+if(tab==='nutrition')renderNutrition();
+})();
 </script></body></html>
