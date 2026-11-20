@@ -4,6 +4,7 @@ on:
     paths:
       - 'sites-sync/**'
       - 'tests/sites-food-core.cjs'
+      - 'tests/sites-merge.cjs'
       - '.github/workflows/sites-food-check.yml'
   workflow_dispatch:
 permissions:
@@ -21,3 +22,5 @@ jobs:
         run: |
           node --check sites-sync/server/food-service.cjs
           node tests/sites-food-core.cjs
+          node --check sites-sync/client/merge.cjs
+          node tests/sites-merge.cjs
