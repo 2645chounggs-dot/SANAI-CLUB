@@ -71,6 +71,7 @@ jobs:
         if: steps.preflight.outputs.build == 'true'
         run: |
           node tests/widget-snapshot.cjs
+          node tests/snack-recommendations.cjs
           mkdir -p /tmp/sanai-geometry-test
           javac -d /tmp/sanai-geometry-test app/src/main/java/club/sanai/app/ChadGeometry.java tests/ChadGeometryTest.java
           java -cp /tmp/sanai-geometry-test club.sanai.app.ChadGeometryTest
