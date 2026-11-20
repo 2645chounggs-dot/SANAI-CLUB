@@ -83,7 +83,7 @@ public final class SanaiFoodSync {
         handler.removeCallbacks(interval);
     }
 
-    private String deviceId() {
+    private synchronized String deviceId() {
         String id = prefs.getString("deviceId", "");
         if (id.matches("[a-f0-9-]{36}")) return id;
         id = UUID.randomUUID().toString();
@@ -91,7 +91,7 @@ public final class SanaiFoodSync {
         return id;
     }
 
-    private PublicKey publicKey() throws Exception {
+    private synchronized PublicKey publicKey() throws Exception {
         KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
         ks.load(null);
         if (!ks.containsAlias(KEY_ALIAS)) {
