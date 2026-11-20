@@ -51,6 +51,7 @@ jobs:
           test "$NATIVE_VERSION" = 71 # current patch targets V6.4.4
           node --check ota/patch.js
           node tests/widget-snapshot.cjs
+          node tests/snack-recommendations.cjs
           export SANAI_KEYSTORE="$RUNNER_TEMP/sanai.p12"
           trap 'rm -f "$SANAI_KEYSTORE"' EXIT
           umask 077
