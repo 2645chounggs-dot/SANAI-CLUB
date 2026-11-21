@@ -1,0 +1,32 @@
+name: Sites cloud food domain validation
+on:
+  pull_request:
+    paths:
+      - 'sites-sync/**'
+      - 'tests/sites-food-core.cjs'
+      - 'tests/sites-merge.cjs'
+      - 'tests/sites-mcp-tools.cjs'
+      - 'tests/sites-device-api.cjs'
+      - '.github/workflows/sites-food-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  domain-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate CRUD and tenant isolation
+        run: |
+          node --check sites-sync/server/food-service.cjs
+          node tests/sites-food-core.cjs
+          node --check sites-sync/client/merge.cjs
+          node tests/sites-merge.cjs
+          node --check sites-sync/server/mcp-tools.cjs
+          node tests/sites-mcp-tools.cjs
+          node --check sites-sync/server/device-api.cjs
+          node tests/sites-device-api.cjs
