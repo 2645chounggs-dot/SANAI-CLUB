@@ -52,6 +52,8 @@ jobs:
           node --check ota/patch.js
           node tests/widget-snapshot.cjs
           node tests/snack-recommendations.cjs
+          node tests/free-food-entry.cjs
+          node tests/food-sync.cjs
           export SANAI_KEYSTORE="$RUNNER_TEMP/sanai.p12"
           trap 'rm -f "$SANAI_KEYSTORE"' EXIT
           umask 077

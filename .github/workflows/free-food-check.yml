@@ -1,0 +1,29 @@
+name: SANAI subscription-free food entry validation
+on:
+  pull_request:
+    paths:
+      - 'app/src/main/assets/**'
+      - 'ota/**'
+      - 'tests/**'
+      - '.github/workflows/free-food-check.yml'
+  push:
+    branches: ['feature/plus-free-food-entry']
+permissions:
+  contents: read
+jobs:
+  food-entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate JavaScript and input safety
+        run: |
+          node --check app/src/main/assets/sanai-free-food.js
+          node --check ota/patch.js
+          node tests/free-food-entry.cjs
+          node tests/food-sync.cjs
+          node tests/snack-recommendations.cjs
+          node tests/widget-snapshot.cjs
