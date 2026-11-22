@@ -72,6 +72,8 @@ jobs:
         run: |
           node tests/widget-snapshot.cjs
           node tests/snack-recommendations.cjs
+          node tests/free-food-entry.cjs
+          node tests/food-sync.cjs
           mkdir -p /tmp/sanai-geometry-test
           javac -d /tmp/sanai-geometry-test app/src/main/java/club/sanai/app/ChadGeometry.java tests/ChadGeometryTest.java
           java -cp /tmp/sanai-geometry-test club.sanai.app.ChadGeometryTest
