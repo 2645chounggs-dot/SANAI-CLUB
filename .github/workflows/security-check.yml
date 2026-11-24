@@ -31,6 +31,7 @@ jobs:
       - name: Static security and regression checks
         run: |
           node tests/security-hardening.cjs
+          node tests/unified-food-search.cjs
           node tests/widget-snapshot.cjs
           node tests/snack-recommendations.cjs
           node tests/free-food-entry.cjs
