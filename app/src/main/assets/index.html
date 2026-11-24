@@ -692,17 +692,33 @@ function onlineFoods(data,q){
  for(const raw of data.hits){
   const x=raw?._source||raw;if(!x||typeof x!=='object')continue;
   const n=x.nutriments||{},vals=[n['energy-kcal_100g'],n.proteins_100g,n.carbohydrates_100g,n.fat_100g];
-  if(vals.some(v=>v==null||v===''||!Number.isFinite(Number(v))||Number(v)<0))continue;
+  if(vals.some(v=>v==null||v===''||!Number.isFinite(Number(v))||Number(v)<0)||Number(vals[0])>1000||vals.slice(1).some(v=>Number(v)>105)||vals.slice(1).reduce((a,v)=>a+Number(v),0)>110)continue;
   let name=textValue(x.product_name_ko)||textValue(x.product_name)||textValue(x.product_name_en)||textValue(x.product_name_main);
   const brand=textValue(x.brands);if(!name)continue;if(brand&&!name.includes(brand))name+=' · '+brand;
   const key=String(x.code||name);if(seen.has(key))continue;seen.add(key);
-  const y={name,alias:brand+' '+q,base:100,unit:'g',kcal:+vals[0],p:+vals[1],c:+vals[2],f:+vals[3],source:'Open Food Facts · 사용자 등록 제품 DB · 제품 라벨 확인'};
+  const y={name,alias:brand+' '+q,brand,base:100,unit:'g',kcal:+vals[0],p:+vals[1],c:+vals[2],f:+vals[3],source:'Open Food Facts · 사용자 등록 제품 DB · 제품 라벨 확인'};
   // Product nutrition is always imported on the declared 100 g basis; no serving-weight inference.
   if(nValidFood(y))out.push(y);
  }
  return out;
 }
 const cache=new Map();let active=null,lastRequest=0;
+ const nativePending=new Map();let nativeSeq=0;
+ window.sanaiProductSearchResult=(id,payload,reason)=>{
+  const p=nativePending.get(id);if(!p)return;nativePending.delete(id);
+  if(reason){p.reject(Error(reason));return;}
+  try{const bytes=Uint8Array.from(atob(payload),c=>c.charCodeAt(0));p.resolve(JSON.parse(new TextDecoder().decode(bytes)));}catch(e){p.reject(Error('응답 형식 오류'));}
+ };
+ function nativeSearch(q,signal){
+  return new Promise((resolve,reject)=>{
+   const id=++nativeSeq;
+   const abort=()=>{nativePending.delete(id);reject(new DOMException('Aborted','AbortError'));};
+   const finish=fn=>v=>{signal.removeEventListener('abort',abort);fn(v);};
+   if(signal.aborted){abort();return;}
+   signal.addEventListener('abort',abort,{once:true});nativePending.set(id,{resolve:finish(resolve),reject:finish(reject)});
+   try{if(!SanaiNative.searchFoodProducts(id,q)){nativePending.delete(id);finish(reject)(Error('검색 요청 제한'));}}catch(e){nativePending.delete(id);finish(reject)(e);}
+  });
+ }
 nOnline=async function(){
  const q=nQuery.trim(),el=document.getElementById('n-online-msg');
  if(!el)return;if(q.length<2){el.textContent='검색어를 2글자 이상 입력해라.';return;}
@@ -712,13 +728,14 @@ nOnline=async function(){
  if(Date.now()-lastRequest<6500){el.textContent='검색 요청 간격 제한 · 잠시 후 다시 검색해라.';return;}
  if(active)active.controller.abort();
  const controller=new AbortController(),req=++nRequest;active={key,controller};lastRequest=Date.now();
- const timer=setTimeout(()=>controller.abort(),18000);
+ const timer=setTimeout(()=>controller.abort(),22000);
  nRemote=[];nSearch();el.textContent='온라인 제품 DB 검색 중…';
  const current=()=>req===nRequest&&tab==='nutrition'&&q===nQuery.trim();
  try{
-  const res=await fetch(onlineUrl(q),{method:'GET',signal:controller.signal,headers:{Accept:'application/json'},credentials:'omit'});
-  if(!res.ok)throw Error('HTTP '+res.status);
-  const data=await res.json(),foods=onlineFoods(data,q);
+  let data;
+  if(typeof SanaiNative!=='undefined'&&typeof SanaiNative.searchFoodProducts==='function'){data=await nativeSearch(q.slice(0,120),controller.signal);}
+  else{const res=await fetch(onlineUrl(q),{method:'GET',signal:controller.signal,headers:{Accept:'application/json'},credentials:'omit'});if(!res.ok)throw Error('HTTP '+res.status);data=await res.json();}
+  const foods=onlineFoods(data,q);
   if(cache.size>=30)cache.delete(cache.keys().next().value);
   cache.set(key,{time:Date.now(),foods});
   if(!current())return;nRemote=foods;el.textContent=foods.length?`제품 ${foods.length}개 찾음 · 실제 제품 라벨과 대조해라.`:'제품 DB에 완전한 영양성분이 등록된 결과 없음. 짬뽕 등 일반 식사는 내장 DB를 이용해라.';nSearch();
