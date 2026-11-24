@@ -3,7 +3,6 @@ import android.app.*;
 import android.content.*;
 import android.media.*;
 import android.os.*;
-import android.provider.Settings;
 import org.json.*;
 
 public class RestReceiver extends BroadcastReceiver {
@@ -16,7 +15,7 @@ public class RestReceiver extends BroadcastReceiver {
         if(!enabled||end<=System.currentTimeMillis())return;
         try{a.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,end,intent(c));}catch(SecurityException e){a.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,end,intent(c));}
     }
-    static boolean canBackground(Context c,boolean full,boolean background){return background||(full&&Settings.canDrawOverlays(c));}
+    static boolean canBackground(Context c,boolean full,boolean background){return background||full;}
     static synchronized void arm(Context c,long root,long end,boolean full,boolean background,boolean sound,boolean vibration){
         if(root<=0||end<=0)return;
         SharedPreferences p=prefs(c);long prior=p.getLong("root",0),current=p.getLong("end",0);
@@ -57,7 +56,7 @@ public class RestReceiver extends BroadcastReceiver {
         SharedPreferences p=prefs(c);
         if(!p.getBoolean("full",true)||!"pending".equals(p.getString("action","")))return false;
         Activity a=MainActivity.foreground;
-        if(a==null&&c.getSystemService(KeyguardManager.class).isKeyguardLocked())return false;
+        if(a==null||c.getSystemService(KeyguardManager.class).isKeyguardLocked())return false;
         if(ChadAlert.visible())return true;
         return ChadAlert.show(c,a);
     }
@@ -68,8 +67,9 @@ public class RestReceiver extends BroadcastReceiver {
         p.edit().putLong("end",0).putLong("last",end).putString("action","pending").apply();
         alarm(c,0,false);updateWidget(c,0);
         if(presentPending(c)){signal(c,p);}
-        else if(p.getBoolean("background",false)||(p.getBoolean("full",true)&&Settings.canDrawOverlays(c)))fallback(c);
+        else if(p.getBoolean("background",false)||p.getBoolean("full",true))fallback(c);
     }
+    static void onAlertPaused(Context c){SharedPreferences p=prefs(c);if("pending".equals(p.getString("action",""))&&(p.getBoolean("background",false)||p.getBoolean("full",true)))fallback(c);}
     static synchronized void choose(Context c,boolean more){
         SharedPreferences p=prefs(c);
         if(!"pending".equals(p.getString("action",""))){ChadAlert.dismiss();return;}
