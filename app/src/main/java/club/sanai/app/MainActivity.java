@@ -41,7 +41,46 @@ public class MainActivity extends Activity {
     @Override protected void onPause(){if(foreground==this)foreground=null;super.onPause();ChadAlert.activityPaused(this);if(foodSync!=null)foodSync.onPause();}
     @Override public void onBackPressed(){if(web!=null&&web.canGoBack())web.goBack();else super.onBackPressed();}
     @Override protected void onActivityResult(int req,int res,Intent data){super.onActivityResult(req,res,data);if(req==201&&picker!=null){picker.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res,data));picker=null;}else if(req==202&&res==RESULT_OK&&data!=null&&data.getData()!=null&&backup!=null){try(OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out!=null)out.write(backup.getBytes(StandardCharsets.UTF_8));}catch(Exception ignored){}backup=null;}else if(req==202){backup=null;}}
+    private final java.util.concurrent.atomic.AtomicBoolean productSearchBusy=new java.util.concurrent.atomic.AtomicBoolean(false);
+    private long lastProductSearch=-10000L;
+    // Fixed HTTPS endpoint, bounded response, no redirects or arbitrary URL supplied by the WebView.
+    private synchronized boolean searchProducts(int requestId,String query){
+        if(requestId<=0||query==null||query.trim().length()<2||query.length()>120||!productSearchBusy.compareAndSet(false,true))return false;
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(now-lastProductSearch<6500L){productSearchBusy.set(false);return false;}
+        lastProductSearch=now;
+        final String q=query.trim();
+        new Thread(()->{
+            java.net.HttpURLConnection conn=null;String response="",error="";
+            try{
+                conn=(java.net.HttpURLConnection)new java.net.URL("https://search.openfoodfacts.org/search").openConnection();
+                conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(8000);conn.setReadTimeout(10000);
+                conn.setRequestMethod("POST");conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type","application/json; charset=utf-8");
+                conn.setRequestProperty("Accept","application/json");
+                conn.setRequestProperty("User-Agent","SANAI-CLUB/6.4.7 (https://github.com/2645chounggs-dot/SANAI-CLUB)");
+                org.json.JSONObject body=new org.json.JSONObject();
+                body.put("q",q);body.put("langs",new org.json.JSONArray(java.util.Arrays.asList("ko","en")));body.put("page_size",25);
+                body.put("fields",new org.json.JSONArray(java.util.Arrays.asList("code","product_name","product_name_ko","product_name_en","brands","nutriments")));
+                byte[] bytes=body.toString().getBytes(StandardCharsets.UTF_8);
+                conn.setFixedLengthStreamingMode(bytes.length);
+                try(java.io.OutputStream stream=conn.getOutputStream()){stream.write(bytes);}
+                int status=conn.getResponseCode();if(status!=200)throw new java.io.IOException("HTTP "+status);
+                final int limit=1024*1024;
+                if(conn.getContentLengthLong()>limit)throw new java.io.IOException("Too large");
+                try(java.io.InputStream in=conn.getInputStream();java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
+                    byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1){if(out.size()+n>limit)throw new java.io.IOException("Too large");out.write(buffer,0,n);}
+                    // Base64 makes external response inert in the JavaScript callback.
+                    response=android.util.Base64.encodeToString(out.toByteArray(),android.util.Base64.NO_WRAP);
+                }
+            }catch(Exception ex){String msg=ex.getMessage();error=msg!=null&&msg.matches("HTTP [0-9]{3}")?msg:"Network or server error";}
+            finally{if(conn!=null)conn.disconnect();productSearchBusy.set(false);}
+            final String payload=response,reason=error;
+            runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()&&HOME.equals(web.getUrl()))web.evaluateJavascript("window.sanaiProductSearchResult && window.sanaiProductSearchResult("+requestId+",'"+payload+"','"+reason+"')",null);});
+        },"sanai-product-search").start();return true;
+    }
     public class NativeBridge {
+        @JavascriptInterface public boolean searchFoodProducts(int requestId,String query){return searchProducts(requestId,query);}
         @JavascriptInterface public void updateCenter(){runOnUiThread(()->updater.open());}
         @JavascriptInterface public void widgetSnapshot(String raw){WidgetState.accept(MainActivity.this,raw);}
         @JavascriptInterface public void schedule(long end){RestReceiver.schedule(MainActivity.this,end);}
