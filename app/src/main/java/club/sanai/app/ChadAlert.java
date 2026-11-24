@@ -5,23 +5,18 @@ import android.graphics.*;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
-import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
 import java.io.InputStream;
 
-/** Same native surface in foreground/background when overlay permission is available. */
+/** Foreground-only native rest alert; background uses notifications. */
 final class ChadAlert {
     private static Dialog dialog;
     private static Activity owner;
-    private static WindowManager manager;
-    private static ChadView overlay;
-    static boolean visible(){return dialog!=null || overlay!=null;}
+    static boolean visible(){return dialog!=null;}
     static void dismiss(){
         Dialog d=dialog;dialog=null;owner=null;
         if(d!=null){try{d.dismiss();}catch(Exception ignored){}}
-        ChadView v=overlay;WindowManager w=manager;overlay=null;manager=null;
-        if(v!=null&&w!=null){try{w.removeViewImmediate(v);}catch(Exception ignored){}}
     }
     private static void edgeToEdge(WindowManager.LayoutParams p){
         if(android.os.Build.VERSION.SDK_INT>=28)p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
@@ -29,22 +24,6 @@ final class ChadAlert {
     }
     static boolean show(Context c, Activity activity){
         if(visible())return true;
-        // With permission use the same window type for both cases, not a differently sized dialog.
-        if(Settings.canDrawOverlays(c)){
-            try{
-                Context app=c.getApplicationContext();
-                WindowManager w=app.getSystemService(WindowManager.class);
-                ChadView v=new ChadView(app);
-                WindowManager.LayoutParams lp=new WindowManager.LayoutParams(-1,-1,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN|
-                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON|WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-                    PixelFormat.OPAQUE);
-                edgeToEdge(lp);
-                lp.gravity=Gravity.TOP|Gravity.LEFT;
-                manager=w;overlay=v;w.addView(v,lp);
-                return true;
-            }catch(Exception e){dismiss();}
-        }
         // Permission-free fallback while the app is open.
         if(activity!=null&&!activity.isFinishing()&&!activity.isDestroyed()){
             try{
@@ -66,7 +45,7 @@ final class ChadAlert {
         return false;
     }
     static void activityPaused(Activity a){
-        if(dialog!=null&&owner==a){dismiss();RestReceiver.presentPending(a.getApplicationContext());}
+        if(dialog!=null&&owner==a){dismiss();RestReceiver.onAlertPaused(a.getApplicationContext());}
     }
     /** Artwork uses full-width portrait adaptation with safe top and no repeated edge pixels. */
     private static final class ChadView extends ViewGroup {

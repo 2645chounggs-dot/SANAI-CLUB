@@ -12,7 +12,7 @@ function snackModule(source){
  return source.slice(begin,end+6);
 }
 const moduleHtml=snackModule(html),moduleOta=snackModule(ota);
-assert.equal(moduleHtml.replaceAll('V6.4.6','V6.4.4'),moduleOta,'Native bundle and OTA must use the same recommendation implementation apart from APK version guard');
+assert.equal(moduleHtml.replaceAll('V6.4.7','V6.4.4'),moduleOta,'Native bundle and OTA must use the same recommendation implementation apart from APK version guard');
 new vm.Script(moduleHtml);
 const builtStart=html.indexOf('const nBuilt=['),builtEnd=html.indexOf('// V5.3 외식 검색',builtStart);
 assert(builtStart>0&&builtEnd>builtStart);

@@ -20,12 +20,13 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle b) {
         super.onCreate(b); RestReceiver.ensureChannel(this); getWindow().setStatusBarColor(0xff08090b); getWindow().setNavigationBarColor(0xff08090b);
         web=new WebView(this); updater=new UpdateCenter(this,web); foodSync=new SanaiFoodSync(this,web); WebSettings s=web.getSettings();
-        s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setAllowContentAccess(true); s.setAllowFileAccess(true); s.setAllowFileAccessFromFileURLs(true); s.setAllowUniversalAccessFromFileURLs(true); s.setMediaPlaybackRequiresUserGesture(false);
+        s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setAllowContentAccess(true); s.setAllowFileAccess(false); s.setAllowFileAccessFromFileURLs(false); s.setAllowUniversalAccessFromFileURLs(false); s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW); s.setMediaPlaybackRequiresUserGesture(false);
         web.addJavascriptInterface(new NativeBridge(),"SanaiNative");
         web.setWebViewClient(new WebViewClient(){
-            private boolean external(String url) { if(url.startsWith("file:///android_asset/"))return false; if(url.startsWith("https://")||url.startsWith("http://")){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(Exception ignored){}}return true; }
+            private boolean external(String url) { if(HOME.equals(url))return false; if(url.startsWith("https://")){try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(Exception ignored){}}return true; }
             @Override public boolean shouldOverrideUrlLoading(WebView v,String u){return external(u);}
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){return !r.isForMainFrame()||external(r.getUrl().toString());}
+            @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest req){Uri u=req.getUrl();String scheme=u.getScheme();String host=u.getHost();if("file".equals(scheme)&&u.toString().startsWith("file:///android_asset/"))return null;if("https".equals(scheme)&&("world.openfoodfacts.org".equals(host)||"search.openfoodfacts.org".equals(host))&&u.getUserInfo()==null&&(u.getPort()==-1||u.getPort()==443))return null;if("content".equals(scheme)&&!req.isForMainFrame())return null;return new WebResourceResponse("text/plain","UTF-8",403,"Blocked",java.util.Collections.emptyMap(),new java.io.ByteArrayInputStream(new byte[0]));}
             @Override public void onPageFinished(WebView v,String url){if(HOME.equals(url)){ready=true;dispatch();sync();updater.onPageReady();foodSync.onReady();}}
         });
         web.setWebChromeClient(new WebChromeClient(){@Override public boolean onShowFileChooser(WebView w,ValueCallback<Uri[]> cb,FileChooserParams p){if(picker!=null)picker.onReceiveValue(null);picker=cb;try{startActivityForResult(p.createIntent(),201);return true;}catch(Exception e){picker=null;cb.onReceiveValue(null);return false;}}});
@@ -40,20 +41,59 @@ public class MainActivity extends Activity {
     @Override protected void onPause(){if(foreground==this)foreground=null;super.onPause();ChadAlert.activityPaused(this);if(foodSync!=null)foodSync.onPause();}
     @Override public void onBackPressed(){if(web!=null&&web.canGoBack())web.goBack();else super.onBackPressed();}
     @Override protected void onActivityResult(int req,int res,Intent data){super.onActivityResult(req,res,data);if(req==201&&picker!=null){picker.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res,data));picker=null;}else if(req==202&&res==RESULT_OK&&data!=null&&data.getData()!=null&&backup!=null){try(OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out!=null)out.write(backup.getBytes(StandardCharsets.UTF_8));}catch(Exception ignored){}backup=null;}else if(req==202){backup=null;}}
+    private final java.util.concurrent.atomic.AtomicBoolean productSearchBusy=new java.util.concurrent.atomic.AtomicBoolean(false);
+    private long lastProductSearch=-10000L;
+    // Fixed HTTPS endpoint, bounded response, no redirects or arbitrary URL supplied by the WebView.
+    private synchronized boolean searchProducts(int requestId,String query){
+        if(requestId<=0||query==null||query.trim().length()<2||query.length()>120||!productSearchBusy.compareAndSet(false,true))return false;
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(now-lastProductSearch<6500L){productSearchBusy.set(false);return false;}
+        lastProductSearch=now;
+        final String q=query.trim();
+        new Thread(()->{
+            java.net.HttpURLConnection conn=null;String response="",error="";
+            try{
+                conn=(java.net.HttpURLConnection)new java.net.URL("https://search.openfoodfacts.org/search").openConnection();
+                conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(8000);conn.setReadTimeout(10000);
+                conn.setRequestMethod("POST");conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type","application/json; charset=utf-8");
+                conn.setRequestProperty("Accept","application/json");
+                conn.setRequestProperty("User-Agent","SANAI-CLUB/6.4.7 (https://github.com/2645chounggs-dot/SANAI-CLUB)");
+                org.json.JSONObject body=new org.json.JSONObject();
+                body.put("q",q);body.put("langs",new org.json.JSONArray(java.util.Arrays.asList("ko","en")));body.put("page_size",25);
+                body.put("fields",new org.json.JSONArray(java.util.Arrays.asList("code","product_name","product_name_ko","product_name_en","brands","nutriments")));
+                byte[] bytes=body.toString().getBytes(StandardCharsets.UTF_8);
+                conn.setFixedLengthStreamingMode(bytes.length);
+                try(java.io.OutputStream stream=conn.getOutputStream()){stream.write(bytes);}
+                int status=conn.getResponseCode();if(status!=200)throw new java.io.IOException("HTTP "+status);
+                final int limit=1024*1024;
+                if(conn.getContentLengthLong()>limit)throw new java.io.IOException("Too large");
+                try(java.io.InputStream in=conn.getInputStream();java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
+                    byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1){if(out.size()+n>limit)throw new java.io.IOException("Too large");out.write(buffer,0,n);}
+                    // Base64 makes external response inert in the JavaScript callback.
+                    response=android.util.Base64.encodeToString(out.toByteArray(),android.util.Base64.NO_WRAP);
+                }
+            }catch(Exception ex){String msg=ex.getMessage();error=msg!=null&&msg.matches("HTTP [0-9]{3}")?msg:"Network or server error";}
+            finally{if(conn!=null)conn.disconnect();productSearchBusy.set(false);}
+            final String payload=response,reason=error;
+            runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()&&HOME.equals(web.getUrl()))web.evaluateJavascript("window.sanaiProductSearchResult && window.sanaiProductSearchResult("+requestId+",'"+payload+"','"+reason+"')",null);});
+        },"sanai-product-search").start();return true;
+    }
     public class NativeBridge {
+        @JavascriptInterface public boolean searchFoodProducts(int requestId,String query){return searchProducts(requestId,query);}
         @JavascriptInterface public void updateCenter(){runOnUiThread(()->updater.open());}
         @JavascriptInterface public void widgetSnapshot(String raw){WidgetState.accept(MainActivity.this,raw);}
         @JavascriptInterface public void schedule(long end){RestReceiver.schedule(MainActivity.this,end);}
         @JavascriptInterface public void restArm(long root,long end,boolean full,boolean background,boolean sound,boolean vibration){RestReceiver.arm(MainActivity.this,root,end,full,background,sound,vibration);}
         @JavascriptInterface public String restState(){return RestReceiver.state(MainActivity.this);}
         @JavascriptInterface public void restFinish(long root,long end){runOnUiThread(()->RestReceiver.finish(MainActivity.this,root,end));}
-        @JavascriptInterface public boolean overlayEnabled(){return Settings.canDrawOverlays(MainActivity.this);}
-        @JavascriptInterface public void overlaySettings(){runOnUiThread(()->{try{startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));}catch(Exception ignored){startActivity(new Intent(Settings.ACTION_SETTINGS));}});}
+        @JavascriptInterface public boolean overlayEnabled(){return false;}
+        @JavascriptInterface public void overlaySettings(){runOnUiThread(()->new AlertDialog.Builder(MainActivity.this).setMessage("보안판에서는 다른 앱 위 팝업을 사용하지 않습니다. 휴식 종료는 앱 내부 화면 또는 일반 알림으로 표시됩니다.").setPositiveButton("확인",null).show());}
         @JavascriptInterface public boolean exactAlarmEnabled(){return android.os.Build.VERSION.SDK_INT<31||getSystemService(AlarmManager.class).canScheduleExactAlarms();}
         @JavascriptInterface public void exactAlarmSettings(){runOnUiThread(()->{if(android.os.Build.VERSION.SDK_INT>=31){try{startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+getPackageName())));}catch(Exception ignored){}}});}
         @JavascriptInterface public void cancel(){RestReceiver.cancel(MainActivity.this);}
         @JavascriptInterface public boolean notificationsEnabled(){return getSystemService(NotificationManager.class).areNotificationsEnabled();}
-        @JavascriptInterface public void notificationSettings(){runOnUiThread(()->startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName())));}
+        @JavascriptInterface public void notificationSettings(){runOnUiThread(()->{if(android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED&&!getPreferences(0).getBoolean("notificationPrompted",false)){getPreferences(0).edit().putBoolean("notificationPrompted",true).apply();requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},203);}else{startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName()));}});}
         @JavascriptInterface public String foodSyncInfo(){return foodSync==null?"{}":foodSync.info();}
         @JavascriptInterface public void foodSyncCopyPairing(){runOnUiThread(()->{if(foodSync!=null)foodSync.copyPairing();});}
         @JavascriptInterface public void foodSyncRefresh(){if(foodSync!=null)foodSync.refresh();}

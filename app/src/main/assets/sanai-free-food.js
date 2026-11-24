@@ -15,6 +15,7 @@ const number=s=>{if(!/^\d+(?:\.\d+)?$/.test(String(s).trim()))return null;
 const goodMacros=v=>v&&FIELDS.every((k,i)=>Number.isFinite(v[i])&&v[i]>=0&&v[i]<=(i===0?20000:5000));
 function findFood(name,catalog){
  const q=normalize(name);if(q.length<2)return null;
+ if(window.SanaiFoodSearch){const S=window.SanaiFoodSearch;const ranked=S.ranked(catalog,name).filter(x=>S.score(x,name)>=65);if(ranked.length)return ranked[0];}
  const candidates=[];
  for(const x of catalog){
   if(!x||typeof x.name!=='string'||!Number.isFinite(x.base)||x.base<=0||
@@ -61,7 +62,7 @@ function parse(input,catalog){
    const qty=Number(quantity[1]),unit=quantity[2].toLowerCase();
    if(!(qty>0&&qty<=100000)){errors.push((i+1)+'번 줄: 수량이 올바르지 않다.');continue;}
    if(unit==='g'||unit==='그램'||unit==='ml'){
-    if(food.unit!=='g'&&food.unit!=='ml'){errors.push((i+1)+'번 줄: "'+foodName+'"의 기준 단위가 달라 직접 입력이 필요하다.');continue;}
+    if(food.unit!==(unit==='ml'?'ml':'g')){errors.push((i+1)+'번 줄: "'+foodName+'"의 기준 단위가 달라 직접 입력이 필요하다.');continue;}
     amount=qty;
    }else if(unit==='인분'&&food.unit==='인분')amount=qty;
    else {amount=Number(food.portion||food.defaultAmount||food.base)*qty;countGuess=true;}
@@ -93,7 +94,7 @@ function renderPanel(){
  section.id='sanai-free-food';section.className='panel stack';
  const heading=document.createElement('h3');heading.textContent='무료 식단 빠른 입력';section.append(heading);
  const note=document.createElement('p');note.className='notice';
- note.textContent='ChatGPT Plus·플러그인·API 없이 휴대폰에 저장한다. 내장 DB 문장 또는 ChatGPT 계산값을 붙여넣고 반드시 미리보기를 확인해라.';
+ note.textContent='ChatGPT Plus·플러그인·API 없이 휴대폰에 저장한다. 내장 DB 문장 또는 직접 확인한 영양값을 붙여넣고 반드시 미리보기를 확인해라.';
  section.append(note);
  const field=document.createElement('textarea');field.id='sanai-free-food-input';field.rows=3;
  field.placeholder='점심 닭가슴살 200g, 모짜렐라 치즈 50g\n또는\n점심|닭가슴살 200g|330|62|0|7.2';
